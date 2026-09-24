@@ -1,0 +1,39 @@
+# NIVEL 2b - tipo de nebulosa
+# Classes: emission | reflection | planetary | supernova_remnant
+#
+# Dataset PEQUENO (poucos milhares) e muito desbalanceado - ha milhares de
+# nebulosas planetarias catalogadas contra ~150 de reflexao. Ajustes
+# especificos deste nivel:
+#
+#   freeze_backbone_epochs: 3  -> protege as features do ImageNet enquanto a
+#                                 cabeca aprende; com poucos dados, soltar o
+#                                 backbone na epoca 1 degrada tudo
+#   dropout maior              -> regularizacao contra overfitting
+#   lr menor                   -> passos menores em dataset pequeno
+#   batch_size menor           -> mais passos por epoca
+
+name: level3_nebula
+level: nebula
+seed: 42
+
+data:
+  image_size: 224
+  batch_size: 16
+  num_workers: 4
+  class_weights: balanced
+  augment: true
+
+model:
+  backbone: resnet18
+  pretrained: true
+  dropout: 0.4
+  freeze_backbone_epochs: 3
+
+optim:
+  epochs: 40
+  lr: 0.0001
+  weight_decay: 0.0005
+  scheduler: cosine
+  label_smoothing: 0.1
+  early_stopping_patience: 8
+  mixed_precision: true

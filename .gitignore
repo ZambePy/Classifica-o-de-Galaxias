@@ -1,0 +1,47 @@
+# ---------------------------------------------------------------
+# Dados e artefatos pesados NUNCA entram no git.
+# Eles vivem em ASTRO_DATA_ROOT (ver .env.example), fora do OneDrive.
+# ---------------------------------------------------------------
+#
+# A barra inicial ancora o padrao na RAIZ do repositorio. Sem ela, "data/"
+# tambem ignoraria src/astro_classifier/data/ - o modulo de coleta sumiria
+# do repositorio em silencio.
+/data/
+/checkpoints/
+/runs/
+/outputs/
+*.pt
+*.pth
+*.onnx
+*.ckpt
+*.fits
+*.fits.gz
+
+# Ambiente
+.venv/
+venv/
+env/
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Notebooks
+.ipynb_checkpoints/
+
+# Editores / SO
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini

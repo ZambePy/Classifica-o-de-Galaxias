@@ -1,0 +1,34 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      # Nota: torch NAO e instalado no CI de proposito. Os testes cobrem
+      # taxonomia, contrato da API, splits e detector de dominio - tudo que
+      # nao precisa de GPU. Testar treino no CI custaria minutos por commit
+      # e nao pegaria bugs que o treino local ja nao pegue.
+      - name: Instalar dependencias
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+          pip install -e . --no-deps
+
+      - name: Lint (ruff)
+        run: ruff check src tests scripts
+
+      - name: Testes
+        run: pytest -v

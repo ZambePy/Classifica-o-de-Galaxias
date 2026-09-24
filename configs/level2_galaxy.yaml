@@ -1,0 +1,35 @@
+# NIVEL 2a - morfologia de galaxia
+# Classes: spiral | elliptical | irregular
+#
+# Dataset grande (Galaxy Zoo). E onde vale investir em backbone maior depois
+# do baseline: troque para efficientnet_b0 e compare. Na GTX 1660 Ti,
+# resnet50 exige batch_size 16.
+#
+# Distinguir espiral de eliptica depende de detalhe fino (bracos, barras);
+# irregular e a classe minoritaria e a mais dificil - espere o pior F1 nela.
+
+name: level2_galaxy
+level: galaxy
+seed: 42
+
+data:
+  image_size: 224
+  batch_size: 32
+  num_workers: 4
+  class_weights: balanced
+  augment: true
+
+model:
+  backbone: resnet18
+  pretrained: true
+  dropout: 0.3
+  freeze_backbone_epochs: 0
+
+optim:
+  epochs: 25
+  lr: 0.0003
+  weight_decay: 0.0001
+  scheduler: cosine
+  label_smoothing: 0.05
+  early_stopping_patience: 6
+  mixed_precision: true
