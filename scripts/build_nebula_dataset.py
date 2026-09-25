@@ -27,8 +27,13 @@ import sys
 
 import pandas as pd
 
-from astro_classifier.data.catalogs import CATALOGS, inspect_catalog, query_catalog
-from astro_classifier.data.cutouts import SURVEY_DSS2, download_cutouts
+from astro_classifier.data.catalogs import (
+    CATALOGS,
+    deduplicate_by_position,
+    inspect_catalog,
+    query_catalog,
+)
+from astro_classifier.data.cutouts import SURVEY_DSS2, cutout_filename, download_cutouts
 from astro_classifier.paths import get_paths
 
 
@@ -53,6 +58,12 @@ def main() -> int:
         help="segundos entre requisicoes ao servico publico (nao reduza muito)",
     )
     parser.add_argument("--survey", default=SURVEY_DSS2, help="HiPS de origem das imagens")
+    parser.add_argument(
+        "--prune",
+        action="store_true",
+        help="remove do disco imagens que nao estao mais no catalogo (orfas de "
+        "uma coleta anterior, ou identificadas como duplicatas)",
+    )
     args = parser.parse_args()
 
     if args.inspect:
@@ -69,28 +80,54 @@ def main() -> int:
     print(f"Dados vao para: {paths.root}")
     print(f"Levantamento (survey): {args.survey}\n")
 
-    all_records: list[dict] = []
-
+    # 1. Consulta TODOS os catalogos ANTES de baixar qualquer imagem. Sem
+    #    isso nao da para deduplicar: os catalogos se sobrepoem (o LBN inclui
+    #    dezenas de nebulosas de Sharpless) e a mesma nebulosa entraria duas
+    #    vezes - podendo cair metade no treino e metade no teste.
+    partes = []
     for spec in CATALOGS:
-        print(f"[{spec.label}] consultando {spec.vizier_id} ({spec.citation})")
+        print(f"[{spec.vizier_id}] {spec.citation}")
         try:
-            df = query_catalog(spec, limit=args.limit)
-        except Exception as exc:  # noqa: BLE001 - um catalogo fora do ar nao pode matar os outros
+            partes.append(query_catalog(spec, limit=args.limit))
+        except Exception as exc:  # noqa: BLE001 - um catalogo fora do ar nao mata os outros
             print(f"  [ERRO] falhou ao consultar {spec.vizier_id}: {exc}")
-            print("  pulando esta classe. Rode --inspect para diagnosticar.")
-            continue
+            print("  pulando. Rode --inspect para diagnosticar.")
 
-        print(f"  {len(df)} objetos no catalogo, baixando recortes...")
-        saved = download_cutouts(
-            df.to_dict("records"),
-            out_dir=paths.raw_nebulae,
-            survey=args.survey,
-            size_px=args.size,
-            pause=args.pause,
-            progress=print,
-        )
-        print(f"  [{spec.label}] {len(saved)}/{len(df)} imagens salvas\n")
-        all_records.extend(saved)
+    if not partes:
+        print("Nenhum catalogo respondeu.")
+        return 1
+
+    todos = pd.concat(partes, ignore_index=True)
+    print(f"\n{len(todos)} objetos somando os catalogos")
+    todos = deduplicate_by_position(todos)
+    print(f"{len(todos)} apos deduplicar: {todos['label'].value_counts().to_dict()}\n")
+
+    # 2. Remove do disco o que nao esta mais no catalogo deduplicado. Sem
+    #    isso, uma imagem baixada por uma versao anterior do catalogo fica
+    #    orfa na pasta e entra no dataset pela varredura - inclusive as que
+    #    a deduplicacao acabou de identificar como repetidas.
+    if args.prune:
+        esperados = {
+            (paths.raw_nebulae / r["label"] / cutout_filename(r))
+            for _, r in todos.iterrows()
+        }
+        removidos = 0
+        for existente in paths.raw_nebulae.rglob("*.jpg"):
+            if existente not in esperados:
+                existente.unlink()
+                removidos += 1
+        print(f"  {removidos} imagens orfas removidas do disco\n")
+
+    # 3. Agora sim, baixa.
+    all_records = download_cutouts(
+        todos.to_dict("records"),
+        out_dir=paths.raw_nebulae,
+        survey=args.survey,
+        size_px=args.size,
+        pause=args.pause,
+        progress=print,
+    )
+    print(f"\n{len(all_records)}/{len(todos)} imagens salvas")
 
     if not all_records:
         print("Nenhuma imagem baixada. Verifique a conexao e rode --inspect.")

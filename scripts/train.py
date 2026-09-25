@@ -20,19 +20,44 @@ import argparse
 import sys
 from pathlib import Path
 
-import torch
-
+# ATENCAO AO QUE E IMPORTADO NO TOPO DESTE ARQUIVO.
+#
+# No Windows o DataLoader cria cada worker com `spawn`, e spawn RE-EXECUTA
+# este modulo dentro do processo filho. Tudo que estiver aqui no topo e
+# carregado de novo por worker - inclusive o que o worker nunca usa.
+#
+# Medido nesta maquina: com sklearn e matplotlib no topo, cada um dos 8
+# processos ocupava ~750 MB, somando 6 GB dos 16 GB de RAM. A memoria
+# comprometida livre caiu para 0,5 GB e o sistema comecou a derrubar
+# processos no meio do treino.
+#
+# Os workers so precisam ler imagem e aplicar transformacoes: torch, PIL,
+# pandas, torchvision.transforms. Metricas, graficos e o modelo sao usados
+# apenas pelo processo principal - por isso sao importados DENTRO de main().
 from astro_classifier.config import ExperimentConfig, resolve_device
 from astro_classifier.data.datasets import build_dataloaders
 from astro_classifier.data.transforms import eval_transforms, train_transforms
-from astro_classifier.evaluation.confusion import plot_confusion_matrix, plot_training_curves
-from astro_classifier.evaluation.metrics import classification_metrics, print_metrics, save_metrics
-from astro_classifier.models.classifier import build_model
 from astro_classifier.paths import get_paths
-from astro_classifier.training.loops import evaluate, set_seed, train_model
 
 
 def main() -> int:
+    # Importados aqui, e nao no topo, para nao serem carregados por cada
+    # worker do DataLoader. Ver o comentario acima.
+    import torch
+
+    from astro_classifier.evaluation.confusion import (
+        plot_confusion_matrix,
+        plot_training_curves,
+    )
+    from astro_classifier.evaluation.metrics import (
+        classification_metrics,
+        print_metrics,
+        save_markdown,
+        save_metrics,
+    )
+    from astro_classifier.models.classifier import AstroClassifier, build_model
+    from astro_classifier.training.loops import evaluate, set_seed, train_model
+
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--config", required=True, help="caminho do YAML de experimento")
     parser.add_argument("--device", default=None, help="cuda | cpu | auto (padrao: do .env)")
@@ -41,9 +66,25 @@ def main() -> int:
         default=None,
         help="raiz das imagens (padrao: ASTRO_DATA_ROOT/raw)",
     )
+    parser.add_argument(
+        "--epochs",
+        type=int,
+        default=None,
+        help="sobrescreve as epocas do YAML. Util para validar o pipeline "
+        "com --epochs 1 antes de deixar um treino longo rodando.",
+    )
+    parser.add_argument(
+        "--name-suffix",
+        default="",
+        help="sufixo no nome do experimento, para nao sobrescrever um run anterior",
+    )
     args = parser.parse_args()
 
     config = ExperimentConfig.from_yaml(args.config)
+    if args.epochs is not None:
+        config.optim.epochs = args.epochs
+    if args.name_suffix:
+        config.name = f"{config.name}{args.name_suffix}"
     device = resolve_device(args.device)
     paths = get_paths().ensure()
     images_root = Path(args.images_root) if args.images_root else paths.raw
@@ -66,10 +107,15 @@ def main() -> int:
         num_workers=config.data.num_workers,
         train_tf=train_transforms(config.data.image_size, config.data.augment),
         eval_tf=eval_transforms(config.data.image_size),
+        soft_labels=config.data.soft_labels,
     )
 
     print(f"treino: {len(train_ds)} imagens  {train_ds.class_counts()}")
-    class_weights = train_ds.class_weights() if config.data.class_weights == "balanced" else None
+    class_weights = (
+        None
+        if config.data.class_weights == "none"
+        else train_ds.class_weights(config.data.class_weights)
+    )
     if class_weights is not None:
         print(f"pesos de classe: {dict(zip(config.level.classes, class_weights.tolist(), strict=True))}\n")
 
@@ -78,7 +124,12 @@ def main() -> int:
     config.save(run_dir / "config.yaml")
 
     model = build_model(config)
-    checkpoint_path = paths.checkpoints / f"{config.level.value}_best.pt"
+    # Sem sufixo, o checkpoint usa o nome canonico do nivel - e o que a API
+    # procura. Com sufixo, grava separado para nao sobrescrever um treino bom
+    # com um teste rapido.
+    checkpoint_path = paths.checkpoints / (
+        f"{config.name}.pt" if args.name_suffix else f"{config.level.value}_best.pt"
+    )
 
     history = train_model(
         model=model,
@@ -94,14 +145,16 @@ def main() -> int:
     # Avaliacao final com o MELHOR checkpoint, nao com o estado da ultima
     # epoca - que pode ser pior por causa do early stopping.
     print(f"\nRecarregando melhor checkpoint (epoca {history.best_epoch}) para avaliacao final")
-    from astro_classifier.models.classifier import AstroClassifier
 
     best_model, _ = AstroClassifier.load(checkpoint_path, device=device)
-    _, y_true, y_pred, _ = evaluate(best_model, val_loader, torch.nn.CrossEntropyLoss(), device)
-    metrics = classification_metrics(y_true, y_pred, config.level.classes)
+    _, y_true, y_pred, y_proba = evaluate(
+        best_model, val_loader, torch.nn.CrossEntropyLoss(), device
+    )
+    metrics = classification_metrics(y_true, y_pred, config.level.classes, y_proba)
 
-    print_metrics(metrics)
+    print_metrics(metrics, titulo=f"{config.name} - VALIDACAO")
     save_metrics(metrics, run_dir / "metrics_val.json")
+    save_markdown(metrics, run_dir / "metrics_val.md", f"{config.name} — validação")
     plot_confusion_matrix(
         metrics["confusion_matrix"],
         config.level.classes,

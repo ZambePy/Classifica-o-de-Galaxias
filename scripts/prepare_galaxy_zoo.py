@@ -51,6 +51,35 @@ COL_ODD = "Class6.1"
 REQUIRED = [COL_SMOOTH, COL_FEATURES, COL_ARTIFACT, COL_ODD]
 
 
+def soft_label_probs(row: pd.Series) -> dict[str, float]:
+    """Distribuicao de votos por classe, normalizada, para treino com soft labels.
+
+    O Galaxy Zoo tem 37 colunas; as tres que importam para a nossa taxonomia:
+
+        Class1.1  lisa, sem features        -> elliptical
+        Class1.2  tem disco / features      -> spiral
+        Class6.1  "tem algo estranho"       -> irregular
+
+    Elas nao somam 1 (Class1.1+1.2+1.3 somam; Class6.1 e uma pergunta
+    separada da arvore), entao normalizamos as tres entre si. Isso PRESERVA
+    a proporcao relativa dos votos, que e o que o soft label precisa, sem
+    fingir uma semantica probabilistica que o catalogo nao tem.
+
+    E uma simplificacao, e deve ser declarada como tal no texto: a arvore de
+    decisao do Galaxy Zoo tem estrutura condicional que estamos achatando.
+    """
+    bruto = {
+        "p_elliptical": max(float(row[COL_SMOOTH]), 0.0),
+        "p_spiral": max(float(row[COL_FEATURES]), 0.0),
+        "p_irregular": max(float(row[COL_ODD]), 0.0),
+    }
+    total = sum(bruto.values())
+    if total <= 0:
+        # Ninguem votou em nada: distribuicao uniforme e o alvo honesto.
+        return dict.fromkeys(bruto, 1.0 / len(bruto))
+    return {k: round(v / total, 6) for k, v in bruto.items()}
+
+
 def assign_label(row: pd.Series, min_vote: float, odd_threshold: float) -> str | None:
     """Voto majoritario com limiar. Devolve None quando a galaxia e ambigua."""
     if row[COL_ARTIFACT] > 0.5:
@@ -141,7 +170,13 @@ def main() -> int:
         else:
             rel = str(source.relative_to(paths.raw)).replace("\\", "/")
 
-        records.append({"path": rel, "label": row["label"], "source": "GalaxyZoo2"})
+        # Guarda TAMBEM a distribuicao de votos, nao so o rotulo vencedor.
+        # E ela que permite treinar com soft labels depois - a informacao
+        # mais rica do Galaxy Zoo e justamente o quanto os humanos
+        # concordaram, e reduzir tudo a um rotulo joga isso fora.
+        registro = {"path": rel, "label": row["label"], "source": "GalaxyZoo2"}
+        registro.update(soft_label_probs(row))
+        records.append(registro)
 
     if faltando:
         print(f"[aviso] {faltando} imagens listadas no CSV nao existem em {images_dir}")

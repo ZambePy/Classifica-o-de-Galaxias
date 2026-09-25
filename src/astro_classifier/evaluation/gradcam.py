@@ -104,9 +104,95 @@ def overlay_heatmap(
 
     Devolve uint8 (H, W, 3), pronto para PIL.Image.fromarray.
     """
-    import matplotlib.cm as cm
+    import matplotlib
 
-    colored = cm.get_cmap("jet")(heatmap)[..., :3]
+    colored = matplotlib.colormaps["jet"](heatmap)[..., :3]
     base = image_rgb.astype(np.float32) / 255.0 if image_rgb.dtype == np.uint8 else image_rgb
     blended = (1 - alpha) * base + alpha * colored
     return (np.clip(blended, 0, 1) * 255).astype(np.uint8)
+
+
+def denormalize(tensor: torch.Tensor) -> np.ndarray:
+    """Desfaz a normalizacao do ImageNet. (3,H,W) -> (H,W,3) em [0,1]."""
+    from astro_classifier.data.transforms import IMAGENET_MEAN, IMAGENET_STD
+
+    media = torch.tensor(IMAGENET_MEAN).view(3, 1, 1)
+    desvio = torch.tensor(IMAGENET_STD).view(3, 1, 1)
+    imagem = (tensor.cpu() * desvio + media).clamp(0, 1)
+    return imagem.permute(1, 2, 0).numpy()
+
+
+def save_gradcam_examples(
+    model: AstroClassifier,
+    dataset,
+    y_true: np.ndarray,
+    y_pred: np.ndarray,
+    classes: list[str],
+    out_dir,
+    device: str = "cpu",
+    per_class: int = 4,
+) -> int:
+    """Uma figura por classe, com acertos e erros lado a lado.
+
+    Escolhemos acertos E erros de proposito. Um acerto mostra em que o modelo
+    se apoia quando da certo; um erro mostra o que ele confundiu - e e no erro
+    que aparece o atalho. Se o mapa de uma classe acende no fundo, no ruido ou
+    na borda da placa fotografica em vez de no objeto, a acuracia daquela
+    classe e um artefato do dataset, nao conhecimento.
+
+    Devolve quantas figuras foram gravadas.
+    """
+    import matplotlib
+
+    matplotlib.use("Agg")
+    from pathlib import Path
+
+    import matplotlib.pyplot as plt
+
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    y_true = np.asarray(y_true)
+    y_pred = np.asarray(y_pred)
+    geradas = 0
+
+    with GradCAM(model) as cam:
+        for indice, nome in enumerate(classes):
+            acertos = np.flatnonzero((y_true == indice) & (y_pred == indice))[:per_class]
+            erros = np.flatnonzero((y_true == indice) & (y_pred != indice))[:per_class]
+            escolhidos = list(acertos) + list(erros)
+            if not escolhidos:
+                continue
+
+            fig, axes = plt.subplots(2, len(escolhidos), figsize=(2.1 * len(escolhidos), 4.6))
+            axes = np.atleast_2d(axes)
+            if axes.shape[0] == 1:  # uma coluna so
+                axes = axes.reshape(2, -1)
+
+            for coluna, idx in enumerate(escolhidos):
+                tensor, _ = dataset[int(idx)]
+                entrada = tensor.unsqueeze(0).to(device)
+                mapa = cam(entrada, class_index=int(y_pred[idx]))
+                original = denormalize(tensor)
+
+                axes[0, coluna].imshow(original)
+                axes[1, coluna].imshow(overlay_heatmap(original, mapa))
+
+                acertou = y_pred[idx] == indice
+                axes[0, coluna].set_title(
+                    ("OK " if acertou else "ERRO -> ") + ("" if acertou else classes[y_pred[idx]]),
+                    fontsize=8,
+                    color="green" if acertou else "crimson",
+                )
+                for linha in (0, 1):
+                    axes[linha, coluna].axis("off")
+
+            axes[0, 0].set_ylabel("original", fontsize=8)
+            axes[1, 0].set_ylabel("Grad-CAM", fontsize=8)
+            fig.suptitle(f"Grad-CAM - classe '{nome}'", fontsize=11)
+            fig.tight_layout()
+            fig.savefig(out_dir / f"{nome}.png", dpi=120)
+            plt.close(fig)
+            geradas += 1
+
+    return geradas

@@ -4,11 +4,13 @@ Enxuto de proposito: sem framework de treino, sem abstracao de callback. Sao
 ~150 linhas que voce consegue ler inteiras e explicar numa banca - e e isso
 que um baseline reprodutivel precisa ser.
 
-Notas de hardware (GTX 1660 Ti, 6 GB):
-  - precisao mista (AMP) e praticamente obrigatoria; corta a memoria pela
-    metade e acelera o treino
-  - resnet18 + batch 32 + 224x224 cabe folgado
-  - resnet50 exige batch 16
+Notas de hardware (GTX 1660 Ti, 6 GB), todas medidas nesta maquina:
+  - precisao mista DESLIGADA. Ao contrario do que o senso comum sugere,
+    nesta placa o AMP deixa o treino 4,6x mais lento (sem tensor cores, o
+    fp16 nao acelera nada) e o cuDNN produz NaN a partir de batch 64.
+    Ver check_numerical_sanity() abaixo.
+  - resnet18 + batch 64 + 224x224 usa ~1,6 GB de VRAM: sobra muito
+  - o gargalo e o DataLoader (CPU decodificando JPG), nao a GPU
 """
 
 from __future__ import annotations
@@ -57,6 +59,54 @@ class TrainingHistory:
         Path(path).write_text(json.dumps(self.to_dict(), indent=2), encoding="utf-8")
 
 
+class NumericalSanityError(RuntimeError):
+    """O modelo produziu NaN/inf antes mesmo de comecar a treinar."""
+
+
+def check_numerical_sanity(
+    model: nn.Module, sample: torch.Tensor, device: str, use_amp: bool
+) -> None:
+    """Um forward de teste antes do treino. Falha em segundos, nao de manha.
+
+    Existe por causa de um bug real encontrado neste projeto: na GTX 1660 Ti
+    (Turing TU116, sem tensor cores), o cuDNN produz NaN no forward sob
+    precisao mista a partir de batch 64. Os pesos nunca se corrompem - o
+    GradScaler rejeita todo passo - entao o treino roda a noite inteira,
+    grava checkpoints, e de manha o modelo preve sempre a mesma classe.
+    A loss aparece como `nan` no log, mas a acuracia parece plausivel.
+
+    Verificar leva um segundo. Nao verificar custa uma noite.
+    """
+    model.eval()
+    try:
+        with torch.inference_mode():
+            with torch.amp.autocast("cuda", enabled=use_amp):
+                saida = model(sample.to(device))
+        ruim = int(torch.isnan(saida.float()).sum()) + int(torch.isinf(saida.float()).sum())
+    finally:
+        model.train()
+
+    if ruim == 0:
+        return
+
+    detalhe = ""
+    if use_amp:
+        with torch.inference_mode():
+            limpo = model(sample.to(device))
+        if int(torch.isnan(limpo.float()).sum()) == 0:
+            detalhe = (
+                "\n\nO mesmo forward em fp32 funciona - o problema e a PRECISAO MISTA.\n"
+                "Esta GPU provavelmente nao lida bem com fp16 (a serie GTX 16xx nao\n"
+                "tem tensor cores). Ponha `mixed_precision: false` no YAML: nessas\n"
+                "placas o AMP nao acelera nada e ainda quebra o treino."
+            )
+
+    raise NumericalSanityError(
+        f"O modelo produziu {ruim} valores NaN/inf num forward de teste, ANTES do "
+        f"treino comecar (batch de {sample.size(0)}, amp={use_amp})." + detalhe
+    )
+
+
 def set_seed(seed: int) -> None:
     """Reprodutibilidade. cudnn.deterministic custa velocidade, mas o ponto
     do projeto e poder repetir o numero publicado."""
@@ -89,9 +139,29 @@ def train_model(
 
     model.to(device)
 
-    criterion = nn.CrossEntropyLoss(
-        weight=class_weights.to(device) if class_weights is not None else None,
-        label_smoothing=config.optim.label_smoothing,
+    # Duas losses, conforme o alvo. A validacao SEMPRE usa cross-entropy
+    # contra o rotulo duro - e contra ele que as metricas sao reportadas e
+    # comparadas entre rodadas.
+    if config.data.soft_labels:
+        from astro_classifier.training.soft_labels import SoftLabelLoss
+
+        criterion = SoftLabelLoss(
+            class_weights=class_weights.to(device) if class_weights is not None else None,
+            temperature=config.data.soft_label_temperature,
+            label_smoothing=config.optim.label_smoothing,
+        ).to(device)
+        print(
+            f"treinando com SOFT LABELS (temperatura {config.data.soft_label_temperature}): "
+            "o alvo e a distribuicao de votos humanos, nao o rotulo vencedor"
+        )
+    else:
+        criterion = nn.CrossEntropyLoss(
+            weight=class_weights.to(device) if class_weights is not None else None,
+            label_smoothing=config.optim.label_smoothing,
+        )
+
+    val_criterion = nn.CrossEntropyLoss(
+        weight=class_weights.to(device) if class_weights is not None else None
     )
     optimizer = torch.optim.AdamW(
         model.parameters(), lr=config.optim.lr, weight_decay=config.optim.weight_decay
@@ -104,6 +174,12 @@ def train_model(
 
     use_amp = config.optim.mixed_precision and device.startswith("cuda")
     scaler = torch.amp.GradScaler("cuda", enabled=use_amp)
+
+    # Antes de qualquer epoca: um forward de teste com o batch real. Se esta
+    # combinacao de GPU, precisao e tamanho de batch produzir NaN, e melhor
+    # saber agora do que amanha de manha.
+    amostra, _ = next(iter(train_loader))
+    check_numerical_sanity(model, amostra, device, use_amp)
 
     history = TrainingHistory()
     epochs_without_improvement = 0
@@ -120,8 +196,8 @@ def train_model(
         train_loss = _train_one_epoch(
             model, train_loader, criterion, optimizer, scaler, device, use_amp, epoch, frozen
         )
-        val_loss, y_true, y_pred, _ = evaluate(model, val_loader, criterion, device)
-        metrics = classification_metrics(y_true, y_pred, model.classes)
+        val_loss, y_true, y_pred, y_proba = evaluate(model, val_loader, val_criterion, device)
+        metrics = classification_metrics(y_true, y_pred, model.classes, y_proba)
 
         if scheduler is not None:
             scheduler.step()
@@ -167,6 +243,8 @@ def _train_one_epoch(
     n_batches = 0
 
     tag = f"epoca {epoch}" + (" [backbone congelado]" if frozen else "")
+    nao_finitos = 0
+
     for images, targets in tqdm(loader, desc=tag, leave=False):
         images = images.to(device, non_blocking=True)
         targets = targets.to(device, non_blocking=True)
@@ -179,10 +257,24 @@ def _train_one_epoch(
         scaler.step(optimizer)
         scaler.update()
 
-        total_loss += loss.item()
-        n_batches += 1
+        # Uma unica loss NaN contamina a media da epoca inteira. Contamos
+        # separado para que o numero no log continue significando algo e o
+        # problema apareca como aviso, nao como um "nan" mudo.
+        if torch.isfinite(loss):
+            total_loss += loss.item()
+            n_batches += 1
+        else:
+            nao_finitos += 1
 
-    return total_loss / max(n_batches, 1)
+    if nao_finitos:
+        total = nao_finitos + n_batches
+        print(
+            f"  [AVISO] {nao_finitos}/{total} batches produziram loss nao finita. "
+            "O treino nao esta aprendendo nesses passos - verifique precisao "
+            "mista, taxa de aprendizado e pesos de classe."
+        )
+
+    return total_loss / max(n_batches, 1) if n_batches else float("nan")
 
 
 @torch.inference_mode()

@@ -19,8 +19,12 @@ seed: 42
 data:
   image_size: 224
   batch_size: 16
+  # 4, nao 8. No Windows cada worker e um processo novo que reimporta torch
+  # (~600 MB de memoria comprometida). Treino e validacao coexistem, entao o
+  # custo real e num_workers + num_workers/2. Com 8 aqui, o arquivo de
+  # paginacao estoura e os workers morrem no meio da epoca.
   num_workers: 4
-  class_weights: balanced
+  class_weights: sqrt_balanced
   augment: true
 
 model:
@@ -36,4 +40,9 @@ optim:
   scheduler: cosine
   label_smoothing: 0.1
   early_stopping_patience: 8
-  mixed_precision: true
+  # DESLIGADO de proposito nesta maquina. A GTX 1660 Ti (Turing TU116) nao
+  # tem tensor cores: fp16 nao acelera nada e, medido aqui, deixa o treino
+  # 4,6x MAIS LENTO (81 img/s contra 378). Pior, o cuDNN produz NaN no
+  # forward a partir de batch 64 - treino inteiro perdido, em silencio.
+  # Em GPU com tensor cores (RTX 20xx+), volte para true.
+  mixed_precision: false

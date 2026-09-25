@@ -23,7 +23,13 @@ from astro_classifier.config import ExperimentConfig, resolve_device
 from astro_classifier.data.datasets import AstroImageDataset
 from astro_classifier.data.transforms import eval_transforms
 from astro_classifier.evaluation.confusion import plot_confusion_matrix
-from astro_classifier.evaluation.metrics import classification_metrics, print_metrics, save_metrics
+from astro_classifier.evaluation.gradcam import save_gradcam_examples
+from astro_classifier.evaluation.metrics import (
+    classification_metrics,
+    print_metrics,
+    save_markdown,
+    save_metrics,
+)
 from astro_classifier.models.classifier import AstroClassifier
 from astro_classifier.ood.msp import calibrate_threshold
 from astro_classifier.paths import get_paths
@@ -36,6 +42,10 @@ def main() -> int:
     parser.add_argument("--config", required=True)
     parser.add_argument("--device", default=None)
     parser.add_argument("--images-root", default=None)
+    parser.add_argument("--no-gradcam", action="store_true", help="pula as figuras de Grad-CAM")
+    parser.add_argument(
+        "--gradcam-per-class", type=int, default=4, help="exemplos por classe no Grad-CAM"
+    )
     parser.add_argument(
         "--target-tpr",
         type=float,
@@ -68,18 +78,40 @@ def main() -> int:
     )
 
     print(f"Avaliando {config.name} em {len(test_ds)} imagens de TESTE ({device})")
-    _, y_true, y_pred, _ = evaluate(model, test_loader, torch.nn.CrossEntropyLoss(), device)
-    metrics = classification_metrics(y_true, y_pred, config.level.classes)
-    print_metrics(metrics)
+    _, y_true, y_pred, y_proba = evaluate(
+        model, test_loader, torch.nn.CrossEntropyLoss(), device
+    )
+    metrics = classification_metrics(y_true, y_pred, config.level.classes, y_proba)
+    print_metrics(metrics, titulo=f"{config.name} - TESTE")
 
     run_dir = paths.runs / config.name
     save_metrics(metrics, run_dir / "metrics_test.json")
+    save_markdown(metrics, run_dir / "metrics_test.md", f"{config.name} — teste")
     plot_confusion_matrix(
         metrics["confusion_matrix"],
         config.level.classes,
         run_dir / "confusion_test.png",
         title=f"{config.name} - teste",
     )
+    # Grad-CAM de acertos e erros. Nao e enfeite: e como se descobre que o
+    # modelo acertou pelo motivo errado - olhando o fundo em vez do objeto.
+    # Importa especialmente nas classes de F1 baixo.
+    if not args.no_gradcam:
+        try:
+            geradas = save_gradcam_examples(
+                model=model,
+                dataset=test_ds,
+                y_true=y_true,
+                y_pred=y_pred,
+                classes=config.level.classes,
+                out_dir=run_dir / "gradcam",
+                device=device,
+                per_class=args.gradcam_per_class,
+            )
+            print(f"Grad-CAM: {geradas} figuras em {run_dir / 'gradcam'}")
+        except Exception as exc:  # noqa: BLE001 - visualizacao nunca derruba a avaliacao
+            print(f"[aviso] Grad-CAM falhou: {exc}")
+
     print(f"\nResultados em {run_dir}")
 
     # O limiar de OOD e calibrado na VALIDACAO, nunca no teste - calibrar no

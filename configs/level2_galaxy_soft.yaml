@@ -1,0 +1,47 @@
+# NIVEL 2a - morfologia de galaxia, com SOFT LABELS
+#
+# Identico ao level2_galaxy.yaml em tudo, exceto pelo alvo do treino. E o
+# par experimental: mesma arquitetura, mesmos dados, mesma semente, mesma
+# divisao - so muda o que o modelo tenta prever.
+#
+#   level2_galaxy.yaml       alvo = rotulo do voto majoritario
+#   level2_galaxy_soft.yaml  alvo = a distribuicao de votos inteira
+#
+# A pergunta: treinar com a incerteza humana melhora o classificador,
+# especialmente na classe ambigua (`irregular`, precisao 0,664)?
+#
+# A validacao continua medindo contra o rotulo duro nos dois casos, senao a
+# comparacao nao existiria.
+
+name: level2_galaxy_soft
+level: galaxy
+seed: 42
+
+data:
+  image_size: 224
+  batch_size: 64
+  num_workers: 2
+  class_weights: sqrt_balanced
+  augment: true
+  soft_labels: true
+  # 1.0 = a distribuicao como os humanos votaram. Aumentar suaviza mais e
+  # da ainda mais peso as classes minoritarias dentro de cada exemplo.
+  soft_label_temperature: 1.0
+
+model:
+  backbone: resnet18
+  pretrained: true
+  dropout: 0.3
+  freeze_backbone_epochs: 0
+
+optim:
+  epochs: 40
+  lr: 0.0003
+  weight_decay: 0.0001
+  scheduler: cosine
+  # Sem label smoothing: os soft labels JA sao a suavizacao, e vinda dos
+  # dados em vez de um valor arbitrario. Somar os dois borraria o alvo duas
+  # vezes e confundiria a comparacao.
+  label_smoothing: 0.0
+  early_stopping_patience: 12
+  mixed_precision: false

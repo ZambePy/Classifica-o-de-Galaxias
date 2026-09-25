@@ -14,9 +14,20 @@ seed: 42
 
 data:
   image_size: 224
-  batch_size: 32
-  num_workers: 4
-  class_weights: balanced
+  batch_size: 64
+  # 2 workers neste nivel, e nao 4. Este e o unico treino longo do projeto
+  # (26 mil imagens) e foi o que derrubou a maquina duas vezes: com 4+2
+  # workers, a memoria comprometida livre caiu para 0,5 GB e o Windows
+  # comecou a matar processos no meio do treino.
+  #
+  # Com 2, sao 4 processos (~650 MB cada) em vez de 6-8. As epocas ficam
+  # ~20% mais lentas, o que e barato perto de perder 40 minutos de treino.
+  # Em maquina com mais RAM, 4 e melhor.
+  num_workers: 2
+  # sqrt em vez do peso cheio: 5,5x no irregular produziu recall 0,886 com
+  # precisao 0,579 - 184 espirais viraram irregular. A raiz (2,3x) mantem o
+  # favorecimento sem gerar tantos falsos positivos.
+  class_weights: sqrt_balanced
   augment: true
 
 model:
@@ -26,10 +37,18 @@ model:
   freeze_backbone_epochs: 0
 
 optim:
-  epochs: 25
+  epochs: 40
   lr: 0.0003
   weight_decay: 0.0001
   scheduler: cosine
   label_smoothing: 0.05
-  early_stopping_patience: 6
-  mixed_precision: true
+  # 12, nao 6. Com 21 epocas o treino parou tendo val_loss AINDA CAINDO
+  # (0,590 -> 0,489): o macro-F1 oscila entre epocas e disparou a parada
+  # cedo demais. Paciencia maior deixa a loss chegar ao plato de verdade.
+  early_stopping_patience: 12
+  # DESLIGADO de proposito nesta maquina. A GTX 1660 Ti (Turing TU116) nao
+  # tem tensor cores: fp16 nao acelera nada e, medido aqui, deixa o treino
+  # 4,6x MAIS LENTO (81 img/s contra 378). Pior, o cuDNN produz NaN no
+  # forward a partir de batch 64 - treino inteiro perdido, em silencio.
+  # Em GPU com tensor cores (RTX 20xx+), volte para true.
+  mixed_precision: false

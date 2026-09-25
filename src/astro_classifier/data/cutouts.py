@@ -104,8 +104,7 @@ def download_cutouts(
     for i, row in enumerate(rows, start=1):
         label_dir = out_dir / row["label"]
         label_dir.mkdir(parents=True, exist_ok=True)
-        filename = f"{_slug(row['name'])}.jpg"
-        dest = label_dir / filename
+        dest = label_dir / cutout_filename(row)
 
         if skip_existing and dest.exists():
             saved.append({**row, "path": str(dest.relative_to(out_dir.parent)).replace("\\", "/")})
@@ -134,7 +133,25 @@ def download_cutouts(
     return saved
 
 
+def cutout_filename(row: dict) -> str:
+    """Nome de arquivo UNICO para um objeto, prefixado pelo catalogo.
+
+    O prefixo nao e enfeite. Os catalogos usam numeracao propria e
+    independente: a regiao numero 1 de Sharpless, a numero 1 de RCW e a
+    numero 1 de Lynds sao tres objetos diferentes, em pontos distantes do
+    ceu. Sem o prefixo, os tres viram `emission/1.jpg` e dois se perdem.
+
+    Foi exatamente o que aconteceu: 301 dos 1667 objetos desapareceram,
+    sobrescritos uns pelos outros, e o log ainda assim dizia "1667 salvos" -
+    porque a gravacao funcionou, so que no mesmo arquivo. O bug so apareceu
+    ao contar os arquivos em disco.
+    """
+    fonte = _slug(row.get("source", "")) if row.get("source") else ""
+    nome = _slug(row["name"])
+    return f"{fonte}_{nome}.jpg" if fonte else f"{nome}.jpg"
+
+
 def _slug(name: str) -> str:
-    """Nome de objeto -> nome de arquivo seguro. 'Sh 2-155' -> 'Sh_2-155'."""
+    """Texto -> pedaco de nome de arquivo seguro. 'Sh 2-155' -> 'Sh_2-155'."""
     safe = "".join(c if c.isalnum() or c in "-_" else "_" for c in str(name).strip())
     return safe.strip("_") or "unnamed"

@@ -22,9 +22,20 @@ class DataConfig:
     image_size: int = 224
     batch_size: int = 32
     num_workers: int = 4
-    # Balanceamento: nebulosas sao muito desbalanceadas entre si.
-    class_weights: str = "balanced"  # "balanced" | "none"
+    # Balanceamento da loss. Ver AstroImageDataset.class_weights():
+    #   balanced       peso cheio, inverso da frequencia
+    #   sqrt_balanced  raiz do peso cheio - use quando a razao entre a maior
+    #                  e a menor classe passa de ~5x, para nao trocar recall
+    #                  alto por precisao baixa
+    #   none           sem peso
+    class_weights: str = "sqrt_balanced"
     augment: bool = True
+    # Treinar com a distribuicao de votos humanos em vez do rotulo vencedor.
+    # Exige colunas p_<classe> no CSV (ver prepare_galaxy_zoo.py). A
+    # VALIDACAO continua usando o rotulo duro - e contra ele que as metricas
+    # sao reportadas.
+    soft_labels: bool = False
+    soft_label_temperature: float = 1.0
 
 
 @dataclass

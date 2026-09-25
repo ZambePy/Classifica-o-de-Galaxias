@@ -1,47 +1,105 @@
-# ---------------------------------------------------------------
-# Dados e artefatos pesados NUNCA entram no git.
-# Eles vivem em ASTRO_DATA_ROOT (ver .env.example), fora do OneDrive.
-# ---------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Dados, modelos e resultados NUNCA entram no git.
 #
-# A barra inicial ancora o padrao na RAIZ do repositorio. Sem ela, "data/"
-# tambem ignoraria src/astro_classifier/data/ - o modulo de coleta sumiria
-# do repositorio em silencio.
+# Eles vivem em ASTRO_DATA_ROOT (ver .env.example), fora do repositorio e
+# fora de qualquer pasta sincronizada. O Galaxy Zoo sozinho tem 61 mil
+# imagens: versiona-las estouraria qualquer cota e travaria o cliente de
+# sincronizacao.
+#
+# A barra inicial ancora o padrao na RAIZ. Sem ela, "data/" tambem
+# esconderia src/astro_classifier/data/ - o modulo de coleta sumiria do
+# repositorio em silencio (ja aconteceu).
+# ---------------------------------------------------------------------------
 /data/
 /checkpoints/
 /runs/
 /outputs/
+/ood/
+
+# Pesos e artefatos de modelo, em qualquer lugar
 *.pt
 *.pth
 *.onnx
 *.ckpt
+*.safetensors
+
+# Dados astronomicos brutos
 *.fits
 *.fits.gz
+*.fit
 
+# Datasets baixados
+*.zip
+*.tar
+*.tar.gz
+*.h5
+*.hdf5
+
+# ---------------------------------------------------------------------------
 # Ambiente
+# ---------------------------------------------------------------------------
 .venv/
 venv/
 env/
 .env
+.python-version
 
+# ---------------------------------------------------------------------------
 # Python
+# ---------------------------------------------------------------------------
 __pycache__/
 *.py[cod]
+*$py.class
 *.egg-info/
 .eggs/
 build/
 dist/
+*.manifest
+*.spec
+
+# Ferramentas
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
 .coverage
+.coverage.*
+coverage.xml
 htmlcov/
+.tox/
+.nox/
 
+# ---------------------------------------------------------------------------
 # Notebooks
+# ---------------------------------------------------------------------------
 .ipynb_checkpoints/
+notebooks/**/*.html
 
-# Editores / SO
+# ---------------------------------------------------------------------------
+# Editores e sistema operacional
+# ---------------------------------------------------------------------------
 .vscode/
 .idea/
+*.swp
+*.swo
+*~
 .DS_Store
 Thumbs.db
 desktop.ini
+$RECYCLE.BIN/
+
+# ---------------------------------------------------------------------------
+# Logs e temporarios
+# ---------------------------------------------------------------------------
+*.log
+*.tmp
+.cache/
+
+# ---------------------------------------------------------------------------
+# EXCECOES - estes SIM entram no repositorio
+#
+# Sao pequenos, e sao o que torna um resultado reproduzivel por outra
+# pessoa: a configuracao exata e os numeros medidos.
+# ---------------------------------------------------------------------------
+!configs/*.yaml
+!docs/**/*.md
+!docs/**/*.png
