@@ -1,0 +1,58 @@
+# Variante do nivel 2 com EfficientNet-B0.
+# Fecha a comparacao de backbones: no nivel 3 esta arquitetura ganhou
+# 4,8 pontos de macro-F1 com um terco dos parametros do ResNet18.
+# Falta saber se o ganho se repete no nivel com 26 mil imagens.
+# NIVEL 2a - morfologia de galaxia
+# Classes: spiral | elliptical | irregular
+#
+# Dataset grande (Galaxy Zoo). E onde vale investir em backbone maior depois
+# do baseline: troque para efficientnet_b0 e compare. Na GTX 1660 Ti,
+# resnet50 exige batch_size 16.
+#
+# Distinguir espiral de eliptica depende de detalhe fino (bracos, barras);
+# irregular e a classe minoritaria e a mais dificil - espere o pior F1 nela.
+
+name: level2_galaxy_efficientnet_b0
+level: galaxy
+seed: 42
+
+data:
+  image_size: 224
+  batch_size: 64
+  # 2 workers neste nivel, e nao 4. Este e o unico treino longo do projeto
+  # (26 mil imagens) e foi o que derrubou a maquina duas vezes: com 4+2
+  # workers, a memoria comprometida livre caiu para 0,5 GB e o Windows
+  # comecou a matar processos no meio do treino.
+  #
+  # Com 2, sao 4 processos (~650 MB cada) em vez de 6-8. As epocas ficam
+  # ~20% mais lentas, o que e barato perto de perder 40 minutos de treino.
+  # Em maquina com mais RAM, 4 e melhor.
+  num_workers: 2
+  # sqrt em vez do peso cheio: 5,5x no irregular produziu recall 0,886 com
+  # precisao 0,579 - 184 espirais viraram irregular. A raiz (2,3x) mantem o
+  # favorecimento sem gerar tantos falsos positivos.
+  class_weights: sqrt_balanced
+  augment: true
+
+model:
+  backbone: efficientnet_b0
+  pretrained: true
+  dropout: 0.3
+  freeze_backbone_epochs: 0
+
+optim:
+  epochs: 40
+  lr: 0.0003
+  weight_decay: 0.0001
+  scheduler: cosine
+  label_smoothing: 0.05
+  # 12, nao 6. Com 21 epocas o treino parou tendo val_loss AINDA CAINDO
+  # (0,590 -> 0,489): o macro-F1 oscila entre epocas e disparou a parada
+  # cedo demais. Paciencia maior deixa a loss chegar ao plato de verdade.
+  early_stopping_patience: 12
+  # DESLIGADO de proposito nesta maquina. A GTX 1660 Ti (Turing TU116) nao
+  # tem tensor cores: fp16 nao acelera nada e, medido aqui, deixa o treino
+  # 4,6x MAIS LENTO (81 img/s contra 378). Pior, o cuDNN produz NaN no
+  # forward a partir de batch 64 - treino inteiro perdido, em silencio.
+  # Em GPU com tensor cores (RTX 20xx+), volte para true.
+  mixed_precision: false

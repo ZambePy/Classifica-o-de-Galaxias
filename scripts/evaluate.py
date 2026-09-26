@@ -42,6 +42,23 @@ def main() -> int:
     parser.add_argument("--config", required=True)
     parser.add_argument("--device", default=None)
     parser.add_argument("--images-root", default=None)
+    parser.add_argument(
+        "--tta",
+        action="store_true",
+        help="test-time augmentation: media sobre as 8 simetrias da imagem. "
+        "Custa 8x mais inferencias e costuma render 1-2 pontos.",
+    )
+    parser.add_argument(
+        "--checkpoint-name",
+        default=None,
+        help="nome do arquivo de checkpoint (padrao: <nivel>_best.pt). Use para "
+        "avaliar uma variante gravada com --name-suffix.",
+    )
+    parser.add_argument(
+        "--run-name",
+        default=None,
+        help="nome da pasta de resultados (padrao: o nome do experimento)",
+    )
     parser.add_argument("--no-gradcam", action="store_true", help="pula as figuras de Grad-CAM")
     parser.add_argument(
         "--gradcam-per-class", type=int, default=4, help="exemplos por classe no Grad-CAM"
@@ -59,7 +76,7 @@ def main() -> int:
     paths = get_paths()
     images_root = Path(args.images_root) if args.images_root else paths.raw
 
-    checkpoint = paths.checkpoints / f"{config.level.value}_best.pt"
+    checkpoint = paths.checkpoints / (args.checkpoint_name or f"{config.level.value}_best.pt")
     if not checkpoint.exists():
         print(f"Checkpoint nao encontrado: {checkpoint}")
         print(f"Treine primeiro: python scripts/train.py --config {args.config}")
@@ -77,14 +94,20 @@ def main() -> int:
         test_ds, batch_size=config.data.batch_size, shuffle=False, num_workers=config.data.num_workers
     )
 
-    print(f"Avaliando {config.name} em {len(test_ds)} imagens de TESTE ({device})")
-    _, y_true, y_pred, y_proba = evaluate(
-        model, test_loader, torch.nn.CrossEntropyLoss(), device
-    )
-    metrics = classification_metrics(y_true, y_pred, config.level.classes, y_proba)
-    print_metrics(metrics, titulo=f"{config.name} - TESTE")
+    sufixo_tta = " + TTA" if args.tta else ""
+    print(f"Avaliando {config.name} em {len(test_ds)} imagens de TESTE ({device}{sufixo_tta})")
+    if args.tta:
+        from astro_classifier.evaluation.tta_eval import evaluate_with_tta
 
-    run_dir = paths.runs / config.name
+        y_true, y_pred, y_proba = evaluate_with_tta(model, test_ds, device)
+    else:
+        _, y_true, y_pred, y_proba = evaluate(
+            model, test_loader, torch.nn.CrossEntropyLoss(), device
+        )
+    metrics = classification_metrics(y_true, y_pred, config.level.classes, y_proba)
+    print_metrics(metrics, titulo=f"{config.name} - TESTE{sufixo_tta}")
+
+    run_dir = paths.runs / (args.run_name or config.name)
     save_metrics(metrics, run_dir / "metrics_test.json")
     save_markdown(metrics, run_dir / "metrics_test.md", f"{config.name} — teste")
     plot_confusion_matrix(

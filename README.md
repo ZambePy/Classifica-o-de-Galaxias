@@ -9,7 +9,7 @@ vez de inventar uma resposta.
                             imagem
                               │
                      ┌────────▼────────┐
-                     │     NÍVEL 1     │   acurácia 0,984
+                     │     NÍVEL 1     │   acurácia 0,982
                      │ galáxia/nebulosa│
                      │      /outro     │
                      └────────┬────────┘
@@ -17,12 +17,12 @@ vez de inventar uma resposta.
           ┌──────▼──────┐           ┌──────▼──────┐
           │  NÍVEL 2a   │           │  NÍVEL 2b   │
           │  espiral    │           │  emissão    │
-          │  elíptica   │  0,942    │  reflexão   │  0,837
+          │  elíptica   │  0,944    │  reflexão   │  0,839
           │  irregular  │           │  planetária │
           └─────────────┘           │  remanesc.  │
                                     └─────────────┘
 
-              ponta a ponta: 91,6% de rótulo final correto
+              ponta a ponta: 90,9% de rótulo final correto
 ```
 
 Projeto acadêmico de dois estudantes de curso técnico de IA. O objetivo não é
@@ -51,15 +51,24 @@ repetir os números, e com as limitações medidas em vez de escondidas.
 
 ## Resultados
 
-| modelo | n (teste) | acurácia | macro-F1 | MCC | ROC AUC |
-|---|---:|---:|---:|---:|---:|
-| **nível 1** · objeto | 753 | 0,9841 | 0,9824 | 0,9758 | 0,9949 |
-| **nível 2** · galáxia | 5.657 | 0,9420 | 0,8837 | 0,8936 | 0,9858 |
-| **nível 3** · nebulosa | 251 | 0,8367 | 0,8297 | 0,7520 | 0,9635 |
-| **cascata** ponta a ponta | 753 | **0,9163** | — | — | — |
+| modelo | backbone | n | acurácia | macro-F1 | MCC | ROC AUC |
+|---|---|---:|---:|---:|---:|---:|
+| **nível 1** · objeto | resnet50 | 1.064 | 0,9821 | 0,9815 | 0,9732 | 0,9947 |
+| **nível 2** · galáxia | resnet18 | 5.659 | 0,9438 | 0,8963 | 0,8964 | 0,9899 |
+| **nível 3** · nebulosa | efficientnet_b0 | 409 | 0,8386 | 0,8105 | 0,7745 | 0,9471 |
+| **cascata** ponta a ponta | — | 1.064 | **0,9088** | — | — | — |
 
-Das 300 galáxias do teste, **299 foram classificadas corretamente**, com
-precisão de 1,000 — nada que não fosse galáxia foi chamado de galáxia.
+Das 375 galáxias do teste, **todas as 375 foram classificadas corretamente**,
+com precisão de 1,000 — nada que não fosse galáxia foi chamado de galáxia.
+
+Dataset: **66.409 imagens**, das quais 37.716 galáxias (Galaxy Zoo), 2.737
+nebulosas de seis catálogos e 1.984 em `other`.
+
+> **Mas leia a [ablação por oclusão](docs/results.md#ablação-por-oclusão--o-resultado-central)
+> antes de acreditar no nível 3.** Com o objeto desfocado, aquele modelo
+> mantém 88,6% da acurácia — mais do que mantém sem o fundo. Ele decide pelo
+> contexto, não pela nebulosa. O de galáxias faz o oposto: desfocado o objeto,
+> cai abaixo de chutar.
 
 Métricas completas, matrizes de confusão, experimentos e análise de vieses em
 **[`docs/results.md`](docs/results.md)**.
@@ -68,7 +77,7 @@ Métricas completas, matrizes de confusão, experimentos e análise de vieses em
 
 ## O que torna este projeto diferente
 
-**1. O dataset de nebulosas é construído, não baixado.**
+**1. O dataset de nebulosas é construído, não baixado — e está publicado.**
 Para galáxias existe o Galaxy Zoo. Para nebulosas não existe equivalente. O
 projeto monta o seu a partir de **seis catálogos astronômicos publicados** —
 listas de objetos com coordenadas, compiladas por astrônomos ao longo de
@@ -78,17 +87,37 @@ décadas — e de um serviço de recorte do céu:
 catálogo (nome, ra, dec, tipo)  →  hips2fits  →  imagem rotulada
 ```
 
+O resultado são **2.737 nebulosas** com coordenada, tipo, enquadramento e
+procedência, em [`docs/dataset/`](docs/dataset/). As imagens pertencem aos
+levantamentos e não são redistribuíveis, mas a curadoria é nossa e cabe em
+205 KB — qualquer pessoa reconstrói o dataset idêntico rodando um comando.
+
+O [cartão do dataset](docs/dataset/dataset_card.md) documenta os filtros, a
+deduplicação e **o viés medido**, com a instrução de reportá-lo junto com
+qualquer acurácia obtida a partir dele.
+
 **2. O sistema pode dizer "não sei".**
 Uma rede com softmax sempre distribui 100% entre as classes que conhece — uma
 foto do Hubble vira "nebulosa planetária, 97%". Aqui há um detector de
 fora-de-domínio, **medido contra três levantamentos diferentes** (AUROC de
-0,695 a 0,953, conforme a distância do domínio).
+0,70 a 0,90) e validado com uma foto real do Hubble.
 
 **3. Os vieses são medidos, não supostos.**
-O projeto identificou e quantificou um viés de contexto no próprio dataset —
-nebulosas galácticas ficam no plano da Via Láctea, e o modelo aprendia essa
-geografia. Demonstrado por três métodos independentes: Grad-CAM, distribuição
-de latitude, e um grupo de controle.
+O projeto identificou e quantificou um viés de contexto no próprio dataset, por
+**quatro métodos independentes**: ablação por oclusão, Grad-CAM, distribuição de
+latitude galáctica e um grupo de controle com céu vazio.
+
+O mais forte é a ablação, que tem controle interno:
+
+```
+             só objeto nítido   só fundo nítido
+galáxia            98,8%              48,2%     ← abaixo do chute
+nebulosa           83,1%              88,6%     ← o fundo basta
+```
+
+Galáxias vêm do SDSS, em alta latitude galáctica — nenhuma correlação possível
+entre posição e morfologia. Nebulosas vêm do DSS2, no plano da Via Láctea, onde
+o fundo correlaciona com a classe por acidente de geografia.
 
 ---
 
@@ -111,7 +140,7 @@ Confirme que está tudo de pé:
 
 ```powershell
 .\.venv\Scripts\Activate.ps1
-pytest            # 88 testes, sem GPU, ~10 segundos
+pytest            # 108 testes, sem GPU, ~10 segundos
 ```
 
 > ⚠️ **Os dados não ficam no repositório.** Imagens, checkpoints e resultados
@@ -199,6 +228,7 @@ REDE NEURAL GALAXIA/
 │   │   ├── gradcam.py              onde o modelo olhou
 │   │   └── cascade.py              ⭐ avaliação ponta a ponta
 │   ├── ood/msp.py                  detector de fora-de-domínio
+│   ├── inference/tta.py            test-time augmentation (8 simetrias)
 │   ├── inference/pipeline.py       ⭐ a cascata em funcionamento
 │   └── api/                        contrato HTTP + modo mock
 │
@@ -207,6 +237,7 @@ REDE NEURAL GALAXIA/
 │   ├── build_nebula_dataset.py     catálogos → imagens de nebulosa
 │   ├── build_other_dataset.py      aglomerados + campos de céu sorteados
 │   ├── build_ood_set.py            conjunto fora-de-domínio, 3 levantamentos
+│   ├── madrugada.sh                bateria completa, sem supervisão
 │   ├── fetch_non_astronomical.py   fotos comuns (STL-10)
 │   ├── prepare_galaxy_zoo.py       37 probabilidades → 3 classes + soft labels
 │   ├── inspect_dataset.py          ⭐ grades visuais — não pule
@@ -217,14 +248,20 @@ REDE NEURAL GALAXIA/
 │   ├── evaluate.py                 teste + Grad-CAM + calibração do detector
 │   ├── evaluate_cascade.py         ⭐ o sistema de ponta a ponta
 │   ├── evaluate_ood.py             detector de erro e de domínio
-│   ├── analyze_shortcut.py         ⭐ o modelo olha o objeto ou o contexto?
+│   ├── analyze_shortcut.py         viés de contexto: 3 evidências
+│   ├── analyze_occlusion.py        ⭐ ablação: o objeto ou o fundo decide?
+│   ├── run_experiments.py          bateria: sementes, backbones, TTA
 │   │   ── uso ──
 │   ├── predict.py                  classificação pela linha de comando
+│   ├── export_dataset.py           publica o catálogo em docs/dataset/
 │   ├── serve_api.ps1               sobe a API
 │   └── setup_env.ps1 / .sh         prepara o ambiente
 │
-├── tests/                          88 testes, sem GPU, ~10 segundos
+├── tests/                          108 testes, sem GPU, ~10 segundos
 ├── docs/
+│   ├── dataset/                    ⭐ o catálogo publicado
+│   │   ├── nebulae_catalog.csv     2.737 objetos, reconstrutível
+│   │   └── dataset_card.md         proveniência, filtros, vieses
 │   ├── results.md                  ⭐ todas as medições
 │   ├── datasets.md                 ⭐ de onde vem cada imagem
 │   ├── api.md                      ⭐ contrato para o dashboard
@@ -245,8 +282,8 @@ subtipo de "outro".
 A resposta da API expõe cada etapa separadamente (campo `levels`), então o
 dashboard mostra *onde* a decisão foi tomada.
 
-**Custo medido:** 6,8 pontos de acurácia entre o nível 1 (0,984) e o rótulo
-final (0,916). Desses, 1,6% são amostras que chegaram ao submodelo errado.
+**Custo medido:** 7,3 pontos de acurácia entre o nível 1 (0,982) e o rótulo
+final (0,909). Desses, 1,8% são amostras que chegaram ao submodelo errado.
 
 ### O aviso de domínio
 
@@ -341,6 +378,7 @@ seja consciente.
 
 | decisão | por quê |
 |---|---|
+| **Um backbone por nível**, escolhido por medida | ResNet50 no nível 1 (+1,1 pt), ResNet18 no nível 2 (empata e treina 6× mais rápido), EfficientNet-B0 no nível 3 (+4,8 pts com ⅓ dos parâmetros). |
 | **Três modelos em cascata**, não multi-tarefa | Os datasets são muito diferentes em tamanho (26 mil galáxias × 1,2 mil nebulosas); separados, cada um recebe a estratégia que precisa. |
 | **Splits globais**, decididos uma vez | Dividir cada nível independentemente vazou 218 das 300 galáxias do teste para o treino do nível 2. |
 | **Transfer learning**, não CNN do zero | Com ~1,2 mil imagens de nebulosa, uma rede do zero decora o treino. |
@@ -360,14 +398,18 @@ seja consciente.
 Declaradas de propósito — um baseline com limitações medidas vale mais que um
 número alto sem procedência. Detalhes em [`docs/results.md`](docs/results.md).
 
-1. **`irregular` é limitado pelo rótulo** (precisão 0,664). O Galaxy Zoo 2 não
+1. **O nível 3 decide pelo contexto**, não pela nebulosa — 80% do desempenho
+   sobrevive ao desfoque do objeto. Seus números não medem reconhecimento.
+2. **`irregular` é limitado pelo rótulo** (precisão 0,732). O Galaxy Zoo 2 não
    tem pergunta direta para essa classe.
-2. **`supernova_remnant` tem sinal óptico fraco** — a maioria foi descoberta em
-   rádio, e o DSS2 não os mostra.
-3. **Domínio restrito ao DSS2/SDSS.** Astrofotos processadas são outro domínio.
-4. **13% dos campos estelares densos** ainda passam por nebulosa. É limite de
-   resolução do levantamento, não do modelo.
-5. **Uma semente só.** Para publicar, rode 3–5 e reporte média e desvio.
+3. **`supernova_remnant` tem sinal óptico fraco** — F1 0,575, e desaba nas duas
+   condições da ablação.
+4. **DSS2 é um levantamento dos anos 1990.** Para galáxias havia opção melhor
+   (DECaLS, PanSTARRS); só as nebulosas galácticas exigem o DSS2.
+5. **Sem benchmark externo.** Os números não são comparáveis com a literatura
+   enquanto o mesmo protocolo não rodar num dataset com resultados publicados.
+6. **Três sementes.** Nível 3 tem desvio de ±0,012 na acurácia: diferenças
+   menores que ~2 pontos ali são ruído.
 
 ---
 
@@ -380,18 +422,21 @@ número alto sem procedência. Detalhes em [`docs/results.md`](docs/results.md).
 - [x] **Detector de domínio**: calibrado e medido em 3 levantamentos
 - [x] **Análise de viés**: Grad-CAM, geografia, grupo de controle
 - [x] **Experimento com soft labels**
-- [ ] **Múltiplas sementes** com média e desvio
-- [ ] **Comparação de backbones**: ResNet18 × EfficientNet-B0 × ResNet50
+- [x] **Múltiplas sementes** com média e desvio
+- [x] **Comparação de backbones**: EfficientNet-B0 ganha 4,8 pts no nível 3 com 1/3 dos parâmetros
+- [x] **Test-time augmentation**: +0,6 pt de acurácia no nível 1
+- [x] **Ablação por oclusão**: isola a contribuição do objeto e do contexto
+- [ ] **Benchmark contra trabalhos publicados** (Galaxy10 DECaLS)
+- [ ] **Trocar o survey das galáxias** para DECaLS ou PanSTARRS
 - [ ] **Cascata × multi-tarefa** (backbone compartilhado)
 - [ ] **Métodos melhores de OOD**: energy-based, Mahalanobis
-- [ ] **Limiar de decisão ajustado** para o `irregular` com soft labels
 
 ---
 
 ## Desenvolvimento
 
 ```powershell
-pytest                              # 88 testes, sem GPU, ~10 s
+pytest                              # 108 testes, sem GPU, ~10 s
 ruff check src tests scripts        # lint
 ```
 

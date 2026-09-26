@@ -56,6 +56,7 @@ FINO_PARA_OBJETO = {
     "planetary": "nebula",
     "supernova_remnant": "nebula",
     "globular_cluster": "other",
+    "open_cluster": "other",
     "empty_field": "other",
     "star_field": "other",
     "non_astronomical": "other",

@@ -38,6 +38,7 @@ from astro_classifier.config import ExperimentConfig, resolve_device
 from astro_classifier.data.datasets import build_dataloaders
 from astro_classifier.data.transforms import eval_transforms, train_transforms
 from astro_classifier.paths import get_paths
+from astro_classifier.taxonomy import Level
 
 
 def main() -> int:
@@ -74,6 +75,14 @@ def main() -> int:
         "com --epochs 1 antes de deixar um treino longo rodando.",
     )
     parser.add_argument(
+        "--seed",
+        type=int,
+        default=None,
+        help="sobrescreve a semente do YAML. Rodar a mesma configuracao com "
+        "sementes diferentes e o unico jeito de saber se uma diferenca entre "
+        "dois modelos e real ou ruido.",
+    )
+    parser.add_argument(
         "--name-suffix",
         default="",
         help="sufixo no nome do experimento, para nao sobrescrever um run anterior",
@@ -83,6 +92,8 @@ def main() -> int:
     config = ExperimentConfig.from_yaml(args.config)
     if args.epochs is not None:
         config.optim.epochs = args.epochs
+    if args.seed is not None:
+        config.seed = args.seed
     if args.name_suffix:
         config.name = f"{config.name}{args.name_suffix}"
     device = resolve_device(args.device)
@@ -124,12 +135,29 @@ def main() -> int:
     config.save(run_dir / "config.yaml")
 
     model = build_model(config)
-    # Sem sufixo, o checkpoint usa o nome canonico do nivel - e o que a API
-    # procura. Com sufixo, grava separado para nao sobrescrever um treino bom
-    # com um teste rapido.
+
+    # QUAL ARQUIVO DE CHECKPOINT ESTE TREINO PODE ESCREVER
+    #
+    # `<nivel>_best.pt` e o checkpoint de PRODUCAO: e o que a cascata e a API
+    # carregam. So o config canonico do nivel pode grava-lo.
+    #
+    # Qualquer variante - outro backbone, outra semente, soft labels - grava
+    # com o proprio nome. Sem esta regra, treinar a variante EfficientNet
+    # sobrescreve silenciosamente o ResNet18 que esta em producao, e a
+    # descoberta vem depois, quando a cascata inteira muda de comportamento
+    # sem ninguem ter mexido nela. Aconteceu.
+    canonico = {
+        Level.OBJECT: "level1_object",
+        Level.GALAXY: "level2_galaxy",
+        Level.NEBULA: "level3_nebula",
+    }[config.level]
+    e_producao = config.name == canonico and not args.name_suffix
+
     checkpoint_path = paths.checkpoints / (
-        f"{config.name}.pt" if args.name_suffix else f"{config.level.value}_best.pt"
+        f"{config.level.value}_best.pt" if e_producao else f"{config.name}.pt"
     )
+    if not e_producao:
+        print(f"variante: o checkpoint de producao nao sera tocado (grava em {checkpoint_path.name})")
 
     history = train_model(
         model=model,

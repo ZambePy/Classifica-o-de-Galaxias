@@ -1,3 +1,7 @@
+# Variante de level1_object com backbone efficientnet_b0.
+# Gerado por script: identico ao original exceto pelo backbone (e pelo
+# batch, quando a VRAM exige). Faz parte da comparacao de arquiteturas
+# prevista no roteiro do README.
 # NIVEL 1 - que tipo de objeto e este?
 # Classes: galaxy | nebula | other
 #
@@ -7,13 +11,13 @@
 # e o dataset de galaxias deve ser SUBAMOSTRADO ao montar este nivel
 # (ver scripts/make_splits.py, opcao --cap-per-class).
 
-name: level1_object
+name: level1_object_efficientnet_b0
 level: object
 seed: 42
 
 data:
   image_size: 224
-  batch_size: 32
+  batch_size: 64
   # 4, nao 8. No Windows cada worker e um processo novo que reimporta torch
   # (~600 MB de memoria comprometida). Treino e validacao coexistem, entao o
   # custo real e num_workers + num_workers/2. Com 8 aqui, o arquivo de
@@ -23,11 +27,7 @@ data:
   augment: true
 
 model:
-  # ResNet50. Medido neste nivel: macro-F1 de 0,9708 para 0,9815 (+1,1 pt),
-  # contra um desvio entre sementes de apenas +-0,002 - pequeno, mas real.
-  # Custa o dobro do tempo de inferencia (~40ms contra ~20ms), o que continua
-  # instantaneo para o dashboard. O EfficientNet-B0 empatou com o ResNet18 aqui.
-  backbone: resnet50
+  backbone: efficientnet_b0
   pretrained: true
   dropout: 0.2
   freeze_backbone_epochs: 0

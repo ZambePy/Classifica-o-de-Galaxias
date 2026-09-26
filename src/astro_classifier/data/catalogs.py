@@ -32,7 +32,8 @@ FOV_BY_LABEL: dict[str, float] = {
     "supernova_remnant": 0.7,
     "globular_cluster": 0.3,
     "empty_field": 0.5,
-    "star_field": 0.5,  # mesmo campo do vazio, de proposito: a diferenca
+    "star_field": 0.5,
+    "open_cluster": 0.25,  # mesmo campo do vazio, de proposito: a diferenca
     # entre os dois deve estar no conteudo (densidade de
     # estrelas), nao na escala da imagem
 }
@@ -94,6 +95,34 @@ class CatalogSpec:
 
 
 CATALOGS: list[CatalogSpec] = [
+    # A ORDEM IMPORTA. A deduplicacao por posicao mantem a PRIMEIRA
+    # ocorrencia, entao catalogos mais completos ou com melhor medida de
+    # tamanho vem antes. O Kohoutek (1989) e mais recente que o Acker (1992)
+    # em cobertura de diametro, por isso abre a lista das planetarias.
+    CatalogSpec(
+        label="planetary",
+        vizier_id="V/127A",
+        name_col="PNG",
+        citation="Kohoutek (2001), Catalogue of Galactic Planetary Nebulae",
+        diam_col="MajDiam",  # arcsec
+        diam_to_arcmin=1.0 / 60.0,
+        min_diam_arcmin=0.5,
+        fov_multiplier=4.0,
+        fov_min_deg=0.02,
+        fov_max_deg=0.3,
+    ),
+    # Catalogo consolidado de nebulosas de reflexao: reune vdB, DG, Ced e
+    # outros numa lista so. E a maior fonte disponivel para a classe que
+    # mais sofria com falta de dados (250 objetos ate aqui).
+    # Nao traz tamanho angular, entao usa o fov de reserva da classe.
+    CatalogSpec(
+        label="reflection",
+        vizier_id="J/A+A/399/141/table1",
+        name_col="Seq",
+        citation="Magakian (2003), Merged catalogue of reflection nebulae, A&A 399, 141",
+        fov_min_deg=0.15,
+        fov_max_deg=0.15,
+    ),
     CatalogSpec(
         label="emission",
         vizier_id="VII/20",
@@ -184,6 +213,28 @@ CATALOGS: list[CatalogSpec] = [
     ),
 ]
 
+# NGC2000.0 reune 13 mil objetos NGC/IC com uma coluna `Type` que diz o que
+# cada um e. Usamos os tipos que NAO sao galaxia nem nebulosa: aglomerados
+# abertos, globulares e estrelas multiplas. Sao objetos reais, brilhantes e
+# catalogados - bem mais informativos para a classe `other` do que campos de
+# ceu sorteados, e exatamente o tipo de coisa que o modelo precisa recusar.
+NGC2000 = CatalogSpec(
+    label="open_cluster",  # sobrescrito por label_map
+    vizier_id="VII/118",
+    name_col="Name",
+    citation="Sinnott (1988), NGC2000.0 - Complete NGC and IC catalogues",
+    diam_col="size",  # arcmin
+    min_diam_arcmin=1.0,
+    fov_multiplier=2.5,
+    fov_min_deg=0.05,
+    fov_max_deg=1.0,
+    label_col="Type",
+    # Gx (galaxia) e Nb (nebulosa) ficam de fora de proposito: o primeiro ja
+    # vem do Galaxy Zoo com morfologia, e o segundo e ambiguo demais - o
+    # catalogo nao diz se a nebulosa e de emissao ou reflexao.
+    label_map={"OC": "open_cluster", "Gb": "globular_cluster"},
+)
+
 # Catalogo usado para parte da classe "other": aglomerados globulares sao
 # objetos extensos e brilhantes que NAO sao galaxias nem nebulosas - sao
 # exatamente o tipo de coisa que o modelo precisa aprender a recusar.
@@ -253,8 +304,14 @@ def query_catalog(spec: CatalogSpec, limit: int = -1) -> pd.DataFrame:
                 f"coluna de rotulo '{spec.label_col}' ausente em {spec.vizier_id}. "
                 f"Colunas: {list(df.columns)}"
             )
-        valores = pd.to_numeric(df[spec.label_col], errors="coerce")
-        rotulos = valores.map(spec.label_map)
+        # O mapa pode ser indexado por numero (LBN Color) ou por texto
+        # (NGC2000 Type). Tenta numerico e cai para texto.
+        coluna = df[spec.label_col]
+        primeira_chave = next(iter(spec.label_map))
+        if isinstance(primeira_chave, str):
+            rotulos = coluna.astype(str).str.strip().map(spec.label_map)
+        else:
+            rotulos = pd.to_numeric(coluna, errors="coerce").map(spec.label_map)
         conhecidos = rotulos.notna()
         antes = len(out)
         out = out[conhecidos.values].reset_index(drop=True)

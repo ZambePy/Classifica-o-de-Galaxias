@@ -10,9 +10,12 @@ obrigado a chamar tudo de galaxia ou nebulosa. Uma foto da Lua vira
     # coleta completa
     python scripts/build_other_dataset.py
 
-Tres fontes, todas pela mesma pipeline de recorte das nebulosas:
+Quatro fontes, todas pela mesma pipeline de recorte das nebulosas:
 
-    globular_cluster  catalogo de Harris - aglomerados globulares. Sao
+    open_cluster      NGC2000.0 - aglomerados abertos. Objetos reais e
+                      brilhantes que nao sao galaxia nem nebulosa.
+
+    globular_cluster  NGC2000.0 e catalogo de Harris - aglomerados. Sao
                       objetos extensos e brilhantes, faceis de confundir com
                       galaxias elipticas. Exatamente o caso dificil que
                       interessa.
@@ -34,8 +37,13 @@ import sys
 
 import pandas as pd
 
-from astro_classifier.data.catalogs import GLOBULAR_CLUSTERS, inspect_catalog, query_catalog
-from astro_classifier.data.cutouts import SURVEY_DSS2, download_cutouts
+from astro_classifier.data.catalogs import (
+    GLOBULAR_CLUSTERS,
+    NGC2000,
+    inspect_catalog,
+    query_catalog,
+)
+from astro_classifier.data.cutouts import SURVEY_DSS2, cutout_filename, download_cutouts
 from astro_classifier.data.sky_sampling import sample_empty_fields, sample_star_fields
 from astro_classifier.paths import get_paths
 
@@ -69,10 +77,17 @@ def main() -> int:
     parser.add_argument("--pause", type=float, default=0.5, help="segundos entre requisicoes")
     parser.add_argument("--survey", default=SURVEY_DSS2)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument(
+        "--prune",
+        action="store_true",
+        help="remove do disco imagens que nao estao mais no catalogo (orfas de "
+        "uma coleta anterior com outro esquema de nomes)",
+    )
     args = parser.parse_args()
 
     if args.inspect:
-        inspect_catalog(GLOBULAR_CLUSTERS)
+        for spec in (NGC2000, GLOBULAR_CLUSTERS):
+            inspect_catalog(spec)
         return 0
 
     paths = get_paths().ensure()
@@ -84,14 +99,17 @@ def main() -> int:
 
     grupos: list[pd.DataFrame] = []
 
-    # 1. Aglomerados globulares (catalogo real)
-    print(f"[globular_cluster] consultando {GLOBULAR_CLUSTERS.vizier_id}")
-    print(f"  {GLOBULAR_CLUSTERS.citation}")
-    try:
-        grupos.append(query_catalog(GLOBULAR_CLUSTERS, limit=args.limit))
-    except Exception as exc:  # noqa: BLE001 - catalogo fora do ar nao pode matar o resto
-        print(f"  [ERRO] {exc}")
-        print("  pulando aglomerados. Rode --inspect para diagnosticar.\n")
+    # 1. Objetos reais que nao sao galaxia nem nebulosa. Sao muito mais
+    #    informativos para a classe `other` do que campos de ceu sorteados:
+    #    um aglomerado globular brilhante e justamente o caso dificil que o
+    #    modelo precisa aprender a nao chamar de galaxia eliptica.
+    for spec in (NGC2000, GLOBULAR_CLUSTERS):
+        print(f"[{spec.vizier_id}] {spec.citation}")
+        try:
+            grupos.append(query_catalog(spec, limit=args.limit))
+        except Exception as exc:  # noqa: BLE001 - um catalogo fora do ar nao mata o resto
+            print(f"  [ERRO] {exc}")
+            print("  pulando. Rode --inspect para diagnosticar.\n")
 
     # 2. e 3. Campos sorteados (sem catalogo)
     print(f"[empty_field] sorteando {n_empty} direcoes em alta latitude galactica")
@@ -100,8 +118,30 @@ def main() -> int:
     print(f"[star_field] sorteando {n_star} direcoes no plano galactico")
     grupos.append(sample_star_fields(n_star, seed=args.seed + 1))
 
-    todos = pd.concat(grupos, ignore_index=True)
+    from astro_classifier.data.catalogs import deduplicate_by_position
+
+    todos = deduplicate_by_position(pd.concat(grupos, ignore_index=True))
     print(f"\n{len(todos)} recortes a baixar: {todos['label'].value_counts().to_dict()}\n")
+
+    # Remove do disco o que nao esta mais no catalogo. Sem isto, mudar o
+    # esquema de nomes deixa as imagens antigas orfas na pasta - e elas
+    # entram no dataset pela varredura, duplicando cada objeto sob dois
+    # nomes. Aconteceu: 735 imagens de `other` estavam duplicadas byte a
+    # byte, e a mesma imagem podia cair no treino com um nome e no teste
+    # com o outro.
+    if args.prune:
+        esperados = {
+            out_dir / r["label"] / cutout_filename(r) for _, r in todos.iterrows()
+        }
+        removidos = 0
+        for existente in out_dir.rglob("*.jpg"):
+            # `non_astronomical` nao vem de catalogo: e preenchida a mao.
+            if existente.parent.name == "non_astronomical":
+                continue
+            if existente not in esperados:
+                existente.unlink()
+                removidos += 1
+        print(f"  {removidos} imagens orfas removidas do disco\n")
 
     salvos = download_cutouts(
         todos.to_dict("records"),

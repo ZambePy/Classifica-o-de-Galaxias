@@ -1,3 +1,7 @@
+# Variante de level1_object com backbone resnet50.
+# Gerado por script: identico ao original exceto pelo backbone (e pelo
+# batch, quando a VRAM exige). Faz parte da comparacao de arquiteturas
+# prevista no roteiro do README.
 # NIVEL 1 - que tipo de objeto e este?
 # Classes: galaxy | nebula | other
 #
@@ -7,7 +11,7 @@
 # e o dataset de galaxias deve ser SUBAMOSTRADO ao montar este nivel
 # (ver scripts/make_splits.py, opcao --cap-per-class).
 
-name: level1_object
+name: level1_object_resnet50
 level: object
 seed: 42
 
@@ -23,10 +27,6 @@ data:
   augment: true
 
 model:
-  # ResNet50. Medido neste nivel: macro-F1 de 0,9708 para 0,9815 (+1,1 pt),
-  # contra um desvio entre sementes de apenas +-0,002 - pequeno, mas real.
-  # Custa o dobro do tempo de inferencia (~40ms contra ~20ms), o que continua
-  # instantaneo para o dashboard. O EfficientNet-B0 empatou com o ResNet18 aqui.
   backbone: resnet50
   pretrained: true
   dropout: 0.2

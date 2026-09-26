@@ -1,3 +1,7 @@
+# Variante de level3_nebula com backbone efficientnet_b0.
+# Gerado por script: identico ao original exceto pelo backbone (e pelo
+# batch, quando a VRAM exige). Faz parte da comparacao de arquiteturas
+# prevista no roteiro do README.
 # NIVEL 2b - tipo de nebulosa
 # Classes: emission | reflection | planetary | supernova_remnant
 #
@@ -12,7 +16,7 @@
 #   lr menor                   -> passos menores em dataset pequeno
 #   batch_size menor           -> mais passos por epoca
 
-name: level3_nebula
+name: level3_nebula_efficientnet_b0
 level: nebula
 seed: 42
 
@@ -28,10 +32,6 @@ data:
   augment: true
 
 model:
-  # EfficientNet-B0, e nao ResNet18. Medido neste nivel: macro-F1 de 0,7628
-  # para 0,8105 (+4,8 pts), com 4,0 M de parametros contra 11,2 M. O ganho e
-  # muito maior que o desvio entre sementes (+-0,017), entao e real.
-  # O ResNet50, com 23,5 M, ficou em 0,7818 - mais pesado e pior.
   backbone: efficientnet_b0
   pretrained: true
   dropout: 0.4

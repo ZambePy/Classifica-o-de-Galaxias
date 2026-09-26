@@ -46,7 +46,17 @@ class ModelNotAvailable(RuntimeError):
 
 
 class HierarchicalPipeline:
-    def __init__(self, checkpoints_dir: str | Path | None = None, device: str | None = None) -> None:
+    def __init__(
+        self,
+        checkpoints_dir: str | Path | None = None,
+        device: str | None = None,
+        use_tta: bool = False,
+    ) -> None:
+        # TTA: classifica as 8 simetrias da imagem e usa a media. No ceu nao
+        # existe orientacao privilegiada, entao as 8 vistas sao igualmente
+        # validas - ver inference/tta.py. Custa 8x mais inferencias (~60ms
+        # em vez de ~20ms), o que continua instantaneo para um dashboard.
+        self.use_tta = use_tta
         paths = get_paths()
         self.checkpoints_dir = Path(checkpoints_dir or paths.checkpoints)
         self.device = device or resolve_device()
@@ -77,7 +87,12 @@ class HierarchicalPipeline:
 
     def _run_level(self, tensor: torch.Tensor, level: Level) -> tuple[LevelPrediction, np.ndarray]:
         model = self._get_model(level)
-        probs = model.predict_proba(tensor.to(self.device))[0].cpu().numpy()
+        if self.use_tta:
+            from astro_classifier.inference.tta import predict_proba_tta
+
+            probs = predict_proba_tta(model, tensor, self.device)[0].cpu().numpy()
+        else:
+            probs = model.predict_proba(tensor.to(self.device))[0].cpu().numpy()
 
         scores = sorted(
             (
