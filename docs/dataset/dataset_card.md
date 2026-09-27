@@ -1,7 +1,7 @@
 # Dataset de nebulosas — cartão de proveniência
 
 Catálogo de **2737 nebulosas galácticas** com coordenadas, tipo e
-enquadramento, montado a partir de seis catálogos astronômicos publicados.
+enquadramento, montado a partir de oito catálogos astronômicos publicados.
 
 As imagens não acompanham este arquivo. Reconstrua-as com:
 

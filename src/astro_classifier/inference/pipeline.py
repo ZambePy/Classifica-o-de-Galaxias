@@ -18,6 +18,7 @@ mesmo com apenas um dos tres checkpoints treinado.
 from __future__ import annotations
 
 import io
+import os
 import time
 from functools import lru_cache
 from pathlib import Path
@@ -51,6 +52,7 @@ class HierarchicalPipeline:
         checkpoints_dir: str | Path | None = None,
         device: str | None = None,
         use_tta: bool = False,
+        ood_method: str | None = None,
     ) -> None:
         # TTA: classifica as 8 simetrias da imagem e usa a media. No ceu nao
         # existe orientacao privilegiada, entao as 8 vistas sao igualmente
@@ -64,6 +66,44 @@ class HierarchicalPipeline:
         self._models: dict[Level, AstroClassifier] = {}
         self._versions: dict[Level, str] = {}
         self.ood = OODDetector.load(self.checkpoints_dir / "ood_threshold.json")
+
+        # --- qual metodo decide "fora do dominio" ---
+        #
+        # O padrao continua o MSP, e NAO por ele ser melhor: medido em tres
+        # levantamentos, o MSP tem AUROC media 0,727 e aceita 2 de cada 3
+        # imagens de fora, contra 0,976 e 1 em 7 do Mahalanobis (ver
+        # docs/results.md). O padrao e o MSP porque trocar o metodo muda o
+        # SIGNIFICADO do campo `domain.score` na resposta da API, e esse campo
+        # e parte do contrato v1.0 com o dashboard. Quebrar isso sem combinar
+        # nao se faz.
+        #
+        # Para ligar o metodo melhor: ood_method="mahalanobis", ou a variavel
+        # de ambiente ASTRO_OOD_METHOD=mahalanobis. O score continua em [0, 1]
+        # (e o percentil entre as imagens legitimas, nao a max softmax), entao
+        # uma barra de progresso no dashboard continua funcionando - o que muda
+        # e a interpretacao do numero.
+        self.ood_method = (ood_method or os.environ.get("ASTRO_OOD_METHOD") or "msp").lower()
+        if self.ood_method not in {"msp", "mahalanobis"}:
+            raise ValueError(
+                f"ood_method '{self.ood_method}' invalido. Use: msp | mahalanobis"
+            )
+
+        self.maha = None
+        if self.ood_method == "mahalanobis":
+            caminho = self.checkpoints_dir / "ood_mahalanobis.pt"
+            if not caminho.exists():
+                raise ModelNotAvailable(
+                    f"ood_method='mahalanobis' pedido, mas {caminho} nao existe. "
+                    "Gere e calibre o detector com: python scripts/compare_ood.py"
+                )
+            from astro_classifier.ood.mahalanobis import MahalanobisDetector
+
+            self.maha = MahalanobisDetector.load(caminho)
+            if self.maha.calibration_scores is None:
+                raise ModelNotAvailable(
+                    f"{caminho} existe mas nao esta calibrado - sem isso o score "
+                    "nao tem escala para exibir. Rode scripts/compare_ood.py de novo."
+                )
 
     def checkpoint_path(self, level: Level) -> Path:
         return self.checkpoints_dir / f"{level.value}_best.pt"
@@ -140,11 +180,29 @@ class HierarchicalPipeline:
 
         # O aviso de dominio usa o nivel 1: e ele que ve a imagem inteira e
         # cuja incerteza indica "isto nao se parece com nada que eu conheco".
-        out_of_domain = self.ood.is_out_of_domain(probs1)
+        if self.maha is not None:
+            # Features do penultimo layer do MESMO modelo de nivel 1. Nao ha
+            # custo de inferencia extra relevante: uma passada a mais no
+            # backbone, ~20 ms, contra a chance de aceitar uma imagem que nao
+            # deveria ser aceita.
+            modelo1 = self._get_model(Level.OBJECT)
+            with torch.inference_mode():
+                feats = modelo1.backbone(tensor.to(self.device)).flatten(1).cpu().numpy()
+            # Limiar 0,05 = aceitar 95% das imagens legitimas, por construcao
+            # do percentil. Nao e numero magico: e o mesmo alvo de TPR que
+            # calibra o MSP.
+            limiar = round(1.0 - self.ood.target_tpr, 4)
+            pontuacao = float(self.maha.domain_percentile(feats)[0])
+            out_of_domain = pontuacao < limiar
+        else:
+            out_of_domain = self.ood.is_out_of_domain(probs1)
+            pontuacao = self.ood.score(probs1)
+            limiar = self.ood.threshold
+
         domain = DomainCheck(
             out_of_domain=out_of_domain,
-            score=self.ood.score(probs1),
-            threshold=self.ood.threshold,
+            score=pontuacao,
+            threshold=limiar,
             message_pt=(
                 "Esta imagem parece estar fora do dominio de treino do modelo "
                 "(recortes de levantamentos DSS2/SDSS). Trate o resultado como "

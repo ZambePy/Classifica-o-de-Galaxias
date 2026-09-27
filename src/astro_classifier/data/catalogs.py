@@ -366,6 +366,47 @@ def deduplicate_by_position(df: pd.DataFrame, tolerancia_arcmin: float = 2.0) ->
     Comparar coordenada resolve: dois objetos a menos de `tolerancia_arcmin`
     um do outro sao o mesmo objeto. Mantem-se a primeira ocorrencia, ou seja,
     a ordem de CATALOGS define a prioridade.
+
+    POR QUE ISTO USA COMPONENTES CONEXAS, E NAO O VIZINHO MAIS PROXIMO
+
+    A primeira versao pegava, para cada objeto, o VIZINHO MAIS PROXIMO
+    (`match_to_catalog_sky(nthneighbor=2)`) e descartava o de indice maior do
+    par. Parece equivalente e nao e: deixou 43 objetos a menos de 2 arcmin no
+    catalogo, e 6 deles puseram a MESMA imagem no treino e no teste.
+
+    Havia DOIS furos, e vale conhecer os dois porque nenhum quebra nada -
+    ambos produzem um catalogo plausivel.
+
+    FURO 1 - cadeias. "Estar a menos de 2 arcmin" e uma relacao entre PARES,
+    mas o vizinho mais proximo e uma FUNCAO: cada objeto aponta para um so.
+    Com A, B, C proximos entre si, se o mais proximo de A e B, o de B e C, e o
+    de C e B:
+
+        A -> B  (B vem depois de A, A e mantido)
+        B -> C  (C vem depois de B, B e mantido)
+        C -> B  (B vem antes de C, C e descartado)
+
+    A e B ficam os dois, apesar de estarem a menos de 2 arcmin. Num campo
+    denso - e o plano galactico e denso - isso e comum, nao excepcional. Medido
+    num teste com 40 objetos aglomerados: sobravam 20, com 19 ainda proximos.
+
+    FURO 2 - empates exatos. Quando dois objetos tem coordenada IDENTICA, a
+    busca devolve o proprio objeto como "vizinho mais proximo" (`idx[i] == i`)
+    para UM dos dois, e qual dos dois e arbitrario - depende da ordem interna
+    da arvore de busca. Se o auto-casamento cai no de indice MAIOR, a condicao
+    `idx[i] < i` e falsa para os dois e nenhum e removido. Foi o que aconteceu
+    com LBN 770 e LBN 771, que tem separacao 0,000 arcmin e geraram dois
+    arquivos byte a byte identicos, um no treino e um no teste.
+
+    A correcao e tratar a proximidade como um GRAFO: toda aresta entre
+    objetos a menos da tolerancia, depois uma componente conexa por objeto
+    fisico, e um representante por componente - o de menor indice, que
+    preserva a prioridade de CATALOGS.
+
+    Efeito colateral honesto: a componente conexa e transitiva. Se A~B e B~C
+    mas A esta a 3 arcmin de C, os tres colapsam num objeto so. Para
+    tolerancia de 2 arcmin em catalogos de nebulosa isso e o comportamento
+    desejado - sao erros de posicao do mesmo objeto, nao objetos distintos.
     """
     if len(df) < 2:
         return df
@@ -375,15 +416,35 @@ def deduplicate_by_position(df: pd.DataFrame, tolerancia_arcmin: float = 2.0) ->
 
     coords = SkyCoord(ra=df["ra"].values * u.deg, dec=df["dec"].values * u.deg)
 
-    # Para cada objeto, o vizinho mais proximo entre os ANTERIORES da lista.
-    manter = np.ones(len(df), dtype=bool)
-    idx, sep, _ = coords.match_to_catalog_sky(coords, nthneighbor=2)
-    proximos = sep.arcmin < tolerancia_arcmin
+    # TODAS as arestas abaixo da tolerancia, nao so a do vizinho mais proximo.
+    i1, i2, _, _ = coords.search_around_sky(coords, tolerancia_arcmin * u.arcmin)
 
-    for i in np.flatnonzero(proximos):
-        # descarta o de indice maior do par, preservando o primeiro catalogo
-        if manter[i] and idx[i] < i:
-            manter[i] = False
+    # Union-find: cada objeto comeca sozinho; cada aresta une duas componentes.
+    pai = np.arange(len(df))
+
+    def raiz(x: int) -> int:
+        while pai[x] != x:
+            pai[x] = pai[pai[x]]  # compressao de caminho
+            x = pai[x]
+        return x
+
+    for a, b in zip(i1, i2, strict=True):
+        if a == b:  # search_around_sky devolve o par (i, i)
+            continue
+        ra_, rb = raiz(int(a)), raiz(int(b))
+        if ra_ != rb:
+            # Une sempre sob o menor indice, para o representante da
+            # componente ser o objeto do catalogo de maior prioridade.
+            pai[max(ra_, rb)] = min(ra_, rb)
+
+    # Mantem um objeto por componente: o de menor indice.
+    manter = np.zeros(len(df), dtype=bool)
+    vistas: set[int] = set()
+    for i in range(len(df)):
+        r = raiz(i)
+        if r not in vistas:
+            vistas.add(r)
+            manter[r] = True
 
     removidos = int((~manter).sum())
     if removidos:

@@ -62,12 +62,15 @@ from __future__ import annotations
 
 import argparse
 import json
+import pathlib
 import sys
 
 import numpy as np
 import pandas as pd
 
 from astro_classifier.paths import get_paths
+
+REPO = pathlib.Path(__file__).resolve().parents[1]
 
 
 def acerto_por_origem(df: pd.DataFrame) -> pd.DataFrame:
@@ -115,6 +118,65 @@ def geografia_sozinha(coords: pd.DataFrame) -> dict:
             ).mean()
         )
     return resultado
+
+
+def _controle_limpo(df, paths) -> tuple[int, int, int] | None:
+    """Recalcula o controle descartando campos que contem nebulosa catalogada.
+
+    Devolve (n_limpo, quantos_viraram_nebula_no_limpo, n_contaminados), ou None
+    se faltar coordenada para decidir.
+
+    POR QUE ISTO E NECESSARIO
+
+    `star_field` so funciona como controle se nao houver nebulosa no quadro. Com
+    campo de 30 arcmin e sorteio livre no plano galactico, havia: 46 dos 300
+    campos coletados alcancavam uma nebulosa do catalogo, e 6 dos 45 que caem no
+    conjunto de teste. Como o relatorio contava 9 erros em 45, ate dois tercos
+    deles podiam ser acertos.
+
+    O criterio e o mesmo de `sky_sampling.drop_near_catalog`: o objeto entra no
+    recorte se a separacao for menor que (meio-campo + raio do objeto).
+    """
+    import numpy as np
+    from astropy import units as u
+    from astropy.coordinates import SkyCoord
+
+    from astro_classifier.data.cutouts import cutout_filename
+
+    indice = paths.catalogs / "other_index.csv"
+    csv_neb = REPO / "docs" / "dataset" / "nebulae_catalog.csv"
+    if not indice.exists() or not csv_neb.exists():
+        print(
+            f"\n   [aviso] sem {indice.name} ou nebulae_catalog.csv - nao da para\n"
+            "           verificar se o controle esta limpo."
+        )
+        return None
+
+    oi = pd.read_csv(indice)
+    neb = pd.read_csv(csv_neb)
+    sf = oi[oi["label"] == "star_field"].copy()
+    if sf.empty or "ra" not in sf.columns:
+        return None
+
+    sf["path"] = ["other/star_field/" + cutout_filename(r) for _, r in sf.iterrows()]
+    no_teste = df[df["origem"] == "star_field"]
+    sf = sf[sf["path"].isin(set(no_teste["path"]))].reset_index(drop=True)
+    if sf.empty:
+        return None
+
+    c = SkyCoord(ra=sf["ra"].values * u.deg, dec=sf["dec"].values * u.deg)
+    cn = SkyCoord(ra=neb["ra"].values * u.deg, dec=neb["dec"].values * u.deg)
+    idx, sep, _ = c.match_to_catalog_sky(cn)
+    meio = sf["fov_deg"].values * 60.0 / 2.0
+    raio = np.nan_to_num(
+        pd.to_numeric(neb["diam_arcmin"], errors="coerce").values[idx] / 2.0, nan=0.0
+    )
+    sf["contaminado"] = sep.arcmin < (meio + raio)
+
+    estado = dict(zip(sf["path"], sf["contaminado"], strict=True))
+    limpos = no_teste[~no_teste["path"].map(estado).fillna(False).astype(bool)]
+    nebula_limpo = int((limpos["predito"] == "nebula").sum())
+    return len(limpos), nebula_limpo, int(sf["contaminado"].sum())
 
 
 def main() -> int:
@@ -175,10 +237,36 @@ def main() -> int:
         resultado["star_field_como_nebula"] = int(virou_nebula)
         resultado["star_field_n"] = int(r["n"])
         print(
-            f"\n   >>> CONTROLE: {virou_nebula} de {r['n']} campos estelares vazios foram\n"
-            f"       classificados como NEBULOSA ({virou_nebula / r['n']:.1%}).\n"
-            "       Quanto maior, mais o modelo decide pelo campo e nao pelo objeto."
+            f"\n   >>> CONTROLE BRUTO: {virou_nebula} de {r['n']} campos estelares foram\n"
+            f"       classificados como NEBULOSA ({virou_nebula / r['n']:.1%})."
         )
+
+        # --- o controle precisa ser LIMPO, e nao era ---
+        #
+        # A premissa e "campo do plano galactico sem nebulosa nenhuma". Medido:
+        # o recorte tem 30 arcmin, e uma fracao dos campos sorteados contem uma
+        # nebulosa catalogada dentro do quadro. Nesses casos, chamar de nebulosa
+        # e ACERTO, e contar como erro infla o numero do atalho.
+        #
+        # A coleta ja filtra isso (ver sky_sampling.drop_near_catalog), mas as
+        # imagens em disco podem ter vindo de antes da correcao - entao a analise
+        # confere por conta propria em vez de confiar na proveniencia.
+        limpo = _controle_limpo(df, paths)
+        if limpo is not None:
+            n_limpo, nebula_limpo, n_sujo = limpo
+            resultado["star_field_contaminados"] = int(n_sujo)
+            resultado["star_field_n_limpo"] = int(n_limpo)
+            resultado["star_field_como_nebula_limpo"] = int(nebula_limpo)
+            if n_sujo:
+                taxa = nebula_limpo / n_limpo if n_limpo else 0.0
+                print(
+                    f"\n   >>> {n_sujo} desses campos CONTEM uma nebulosa catalogada dentro\n"
+                    f"       do recorte - para eles, 'nebulosa' e a resposta certa.\n"
+                    f"   >>> CONTROLE LIMPO: {nebula_limpo} de {n_limpo} ({taxa:.1%})."
+                )
+            else:
+                print("\n   >>> nenhum campo contem nebulosa catalogada: controle limpo.")
+        print("       Quanto maior, mais o modelo decide pelo campo e nao pelo objeto.")
 
     # --- 2 e 3 dependem das coordenadas, que so existem para as nebulosas ---
     indice = paths.catalogs / "nebulae_index.csv"

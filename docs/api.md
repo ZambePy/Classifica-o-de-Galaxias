@@ -119,8 +119,38 @@ const dados = await resposta.json();
 | `levels` | O detalhamento. Cada nível vira um gráfico de barras com todas as classes. |
 | `label_pt` | Sempre exiba este, nunca `label` (que é o nome interno em inglês). |
 | `domain.out_of_domain` | **Quando `true`, exiba o aviso em destaque**, junto do resultado. |
+| `domain.score` | Opcional. Sempre em `[0, 1]`, serve para uma barra — mas veja a nota abaixo sobre o que ele significa. |
 | `mock` | Quando `true`, mostre um selo "dados simulados" — evita demonstrar um mock achando que é real. |
 | `model_version` | Rodapé/debug. Permite saber qual checkpoint gerou aquele número. |
+
+### Uma nota sobre `domain.score` e `domain.threshold`
+
+Os dois vêm sempre em `[0, 1]`, e a regra é sempre a mesma:
+`out_of_domain === score < threshold`. **O dashboard não precisa saber mais que
+isso** — use `out_of_domain` para decidir e `score` no máximo como barra.
+
+O que o número *significa* depende do método configurado no servidor, e por isso
+não convém escrever texto no frontend interpretando o valor:
+
+| método | `score` é | `threshold` típico |
+|---|---|---|
+| `msp` (padrão) | a maior probabilidade do softmax | ~0,88 |
+| `mahalanobis` | o percentil entre as imagens legítimas | 0,05 |
+
+O padrão é `msp`. O `mahalanobis` é **bem melhor** a rejeitar imagens de fora
+(AUROC 0,976 contra 0,727; aceita 1 em 7 imagens de fora em vez de 2 em 3 — ver
+[results.md](results.md#três-métodos-de-fora-de-domínio)), e liga-se no servidor
+com a variável de ambiente:
+
+```powershell
+$env:ASTRO_OOD_METHOD = "mahalanobis"
+```
+
+**Isto não muda o contrato:** nenhum campo entra, sai ou troca de tipo, e a
+comparação `score < threshold` continua valendo. Muda a escala interna do
+`score`, então se o dashboard exibir o valor como "confiança de domínio: 94%",
+combine a troca antes — com `mahalanobis` um valor legítimo pode ser 0,42 sem
+que haja nada de errado.
 
 ---
 

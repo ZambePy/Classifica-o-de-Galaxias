@@ -39,7 +39,7 @@ REPO = Path(__file__).resolve().parents[1]
 CARTAO = """# Dataset de nebulosas — cartão de proveniência
 
 Catálogo de **{n_total} nebulosas galácticas** com coordenadas, tipo e
-enquadramento, montado a partir de seis catálogos astronômicos publicados.
+enquadramento, montado a partir de {n_fontes} catálogos astronômicos publicados.
 
 As imagens não acompanham este arquivo. Reconstrua-as com:
 
@@ -94,6 +94,18 @@ Catálogos se sobrepõem — o Lynds Bright Nebulae inclui dezenas de nebulosas
 de Sharpless sob outra nomenclatura. Objetos a menos de **2 arcmin** um do
 outro são tratados como o mesmo e mantém-se a primeira ocorrência, na ordem
 declarada em `data/catalogs.py`. Foram removidos {n_dup} objetos.
+
+A proximidade é tratada como **grafo**: todas as arestas abaixo da tolerância,
+componentes conexas, um representante por componente. Isso importa — uma versão
+anterior comparava cada objeto apenas com seu vizinho *mais próximo*, e deixava
+43 objetos a menos de 2 arcmin no catálogo, incluindo pares com separação
+exatamente zero que terminaram com a mesma imagem no treino e no teste.
+
+**Alguns objetos duplicados têm classes diferentes nos catálogos de origem** —
+Sharpless nº1 é `emission` e Magakian nº644, a 0,4 arcmin de distância, é
+`reflection`. A deduplicação resolve pela ordem de prioridade, o que é uma
+escolha e não uma verdade. Isso põe um piso na acurácia alcançável neste
+dataset, e quem publicar um número deve mencioná-lo.
 
 {nota_absorvidos}
 
@@ -244,6 +256,7 @@ def main() -> int:
     cartao.write_text(
         CARTAO.format(
             n_total=len(catalogo),
+            n_fontes=catalogo["source"].nunique(),
             composicao=composicao,
             fontes=fontes,
             regras=regras,

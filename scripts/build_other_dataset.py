@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from pathlib import Path
 
 import pandas as pd
 
@@ -111,12 +112,38 @@ def main() -> int:
             print(f"  [ERRO] {exc}")
             print("  pulando. Rode --inspect para diagnosticar.\n")
 
-    # 2. e 3. Campos sorteados (sem catalogo)
+    # 2. e 3. Campos sorteados.
+    #
+    # O catalogo de nebulosas entra aqui como lista de EXCLUSAO, nao de
+    # inclusao: nenhum campo sorteado pode conter um objeto catalogado. Sem
+    # isso, 15% dos `star_field` continham uma nebulosa - e eles sao o grupo
+    # de controle da analise de atalho, onde a premissa e justamente que nao
+    # ha nebulosa nenhuma ali. Ver `drop_near_catalog`.
+    #
+    # A fonte e o CSV publicado em docs/dataset/, que ja esta no repositorio -
+    # nao custa uma consulta de rede e e exatamente o conjunto que gerou as
+    # imagens de nebulosa em disco.
+    catalogo_neb = None
+    csv_neb = Path(__file__).resolve().parents[1] / "docs" / "dataset" / "nebulae_catalog.csv"
+    if csv_neb.exists():
+        catalogo_neb = pd.read_csv(csv_neb)
+        print(f"[exclusao] {len(catalogo_neb)} nebulosas de {csv_neb.name} serao evitadas")
+    else:
+        print(
+            f"[aviso] {csv_neb} nao existe - os campos sorteados NAO serao\n"
+            "        filtrados, e alguns vao conter nebulosas catalogadas.\n"
+            "        Rode scripts/export_dataset.py antes para evitar isso."
+        )
+
     print(f"[empty_field] sorteando {n_empty} direcoes em alta latitude galactica")
-    grupos.append(sample_empty_fields(n_empty, seed=args.seed))
+    grupos.append(
+        sample_empty_fields(n_empty, seed=args.seed, catalogo=catalogo_neb, progress=print)
+    )
 
     print(f"[star_field] sorteando {n_star} direcoes no plano galactico")
-    grupos.append(sample_star_fields(n_star, seed=args.seed + 1))
+    grupos.append(
+        sample_star_fields(n_star, seed=args.seed + 1, catalogo=catalogo_neb, progress=print)
+    )
 
     from astro_classifier.data.catalogs import deduplicate_by_position
 

@@ -43,9 +43,54 @@ NEGRITO = "\033[1m"
 FIM = "\033[0m"
 
 
+def _preparar_saida() -> bool:
+    """Garante que o console aguenta os caracteres de bloco. Devolve se aguenta.
+
+    O CONSOLE DO WINDOWS QUEBRAVA ESTE SCRIPT.
+
+    O terminal padrao do Windows usa cp1252, que nao tem '►' nem os blocos
+    '█'/'░'. Imprimir a tabela de probabilidades levantava
+
+        UnicodeEncodeError: 'charmap' codec can't encode character '\\u25ba'
+
+    no meio da saida - depois de ja ter impresso o titulo, o que e pior: a
+    pessoa via o resultado comecar e o comando morrer. E este e o caminho que o
+    README documenta para classificar uma imagem.
+
+    A correcao tem duas camadas. Primeiro tenta trocar a codificacao do stdout
+    para UTF-8, que resolve em consoles modernos. Se nao der, avisa o chamador
+    para usar o desenho em ASCII - degradar o visual e melhor que falhar.
+    """
+    fluxo = sys.stdout
+    codificacao = (getattr(fluxo, "encoding", "") or "").lower()
+    if "utf" in codificacao:
+        return True
+
+    reconfigurar = getattr(fluxo, "reconfigure", None)
+    if reconfigurar is not None:
+        try:
+            reconfigurar(encoding="utf-8")
+            return True
+        except (ValueError, OSError):
+            pass
+    return False
+
+
+# Definido em main(): False forca o desenho em ASCII.
+UNICODE_OK = True
+
+
 def barra(fracao: float, largura: int = 24) -> str:
     cheio = round(fracao * largura)
-    return "█" * cheio + "░" * (largura - cheio)
+    if UNICODE_OK:
+        return "█" * cheio + "░" * (largura - cheio)
+    return "#" * cheio + "." * (largura - cheio)
+
+
+def marcador(selecionado: bool) -> str:
+    if not selecionado:
+        return " "
+    return "►" if UNICODE_OK else ">"
 
 
 def cor_da_confianca(valor: float) -> str:
@@ -63,7 +108,8 @@ def imprimir(caminho: Path, resposta, colorido: bool = True) -> None:
 
     fora = resposta.domain.out_of_domain
     if fora:
-        print(c("  ⚠  FORA DO DOMINIO DE TREINO - resultado pouco confiavel", AMARELO))
+        aviso = "⚠" if UNICODE_OK else "!"
+        print(c(f"  {aviso}  FORA DO DOMINIO DE TREINO - resultado pouco confiavel", AMARELO))
         print(c(f"     confianca {resposta.domain.score:.3f} < limiar {resposta.domain.threshold:.3f}", CINZA))
 
     rotulo = resposta.summary_pt
@@ -74,7 +120,7 @@ def imprimir(caminho: Path, resposta, colorido: bool = True) -> None:
     for nivel in resposta.levels:
         print(f"\n  {c(nivel.level, CINZA)}  (modelo {c(nivel.model_version, CINZA)})")
         for score in nivel.scores:
-            marca = "►" if score.label == nivel.predicted else " "
+            marca = marcador(score.label == nivel.predicted)
             print(
                 f"    {marca} {score.label_pt:<26} {barra(score.probability)} "
                 f"{score.probability:>6.1%}"
@@ -126,6 +172,11 @@ def main() -> int:
     parser.add_argument("--device", default=None, help="cuda | cpu | auto")
     parser.add_argument("--no-color", action="store_true")
     args = parser.parse_args()
+
+    # Antes de qualquer print: o console do Windows usa cp1252 e nao aguenta
+    # os blocos nem as setas. Ver `_preparar_saida`.
+    global UNICODE_OK
+    UNICODE_OK = _preparar_saida()
 
     entrada = Path(args.entrada)
     if not entrada.exists():

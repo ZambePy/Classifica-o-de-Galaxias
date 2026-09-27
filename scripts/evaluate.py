@@ -37,6 +37,43 @@ from astro_classifier.taxonomy import Level
 from astro_classifier.training.loops import evaluate
 
 
+def aviso_backbone_divergente(config, ckpt: dict, nome_arquivo: str) -> str | None:
+    """Avisa quando a config declara um backbone e o checkpoint traz outro.
+
+    ISTO JA CUSTOU UMA CONCLUSAO ERRADA AO PROJETO.
+
+    Sem `--checkpoint-name`, este script carrega `<nivel>_best.pt` - o de
+    PRODUCAO - qualquer que seja o backbone declarado na config. Passar
+    `level3_nebula_efficientnet_b0.yaml` avalia entao o checkpoint em producao
+    (que pode ser resnet50) e grava o relatorio sob o nome da config do
+    efficientnet.
+
+    Foi assim que a comparacao de backbones saiu com tres numeros IDENTICOS e a
+    conclusao "o backbone nao importa" - quando o ganho real era de 4,8 pontos de
+    macro-F1 no nivel 3.
+
+    Nada falha nesse caminho: os pesos carregam, as metricas saem, o arquivo tem
+    o nome esperado. So o rotulo esta errado. Por isso o aviso.
+
+    Devolve o texto do aviso, ou None quando esta tudo coerente.
+    """
+    do_checkpoint = ckpt.get("backbone")
+    da_config = getattr(getattr(config, "model", None), "backbone", None)
+    if not do_checkpoint or not da_config or do_checkpoint == da_config:
+        return None
+
+    return (
+        f"\n[ATENCAO] a config '{config.name}' declara backbone '{da_config}', "
+        f"mas {nome_arquivo} foi treinado com '{do_checkpoint}'.\n"
+        f"          O que sera avaliado e o '{do_checkpoint}' do checkpoint, e o "
+        f"relatorio sairia\n"
+        f"          rotulado como '{config.name}'. Se a intencao era avaliar o "
+        f"'{da_config}',\n"
+        f"          passe --checkpoint-name com o arquivo certo "
+        f"(ex.: {config.name}.pt).\n"
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--config", required=True)
@@ -82,7 +119,10 @@ def main() -> int:
         print(f"Treine primeiro: python scripts/train.py --config {args.config}")
         return 1
 
-    model, _ = AstroClassifier.load(checkpoint, device=device)
+    model, ckpt = AstroClassifier.load(checkpoint, device=device)
+    aviso = aviso_backbone_divergente(config, ckpt, checkpoint.name)
+    if aviso:
+        print(aviso)
 
     test_ds = AstroImageDataset(
         paths.splits / f"{config.level.value}_test.csv",

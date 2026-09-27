@@ -88,3 +88,57 @@ def test_os_configs_do_repositorio_respeitam_a_regra():
         f"mais de um config grava no mesmo checkpoint de producao: {producao}"
     )
     assert len(producao) == 3, f"esperados 3 configs canonicos, achados {producao}"
+
+
+class TestAvisoBackboneDivergente:
+    """`evaluate.py` avisa quando a config e o checkpoint discordam de backbone.
+
+    O BUG QUE ISTO IMPEDE (ja aconteceu, bug nº 9 do projeto)
+
+    Sem `--checkpoint-name`, `evaluate.py` carrega `<nivel>_best.pt` - o de
+    producao - qualquer que seja o backbone da config. Rodar a config do
+    EfficientNet avaliava o ResNet50 de producao e gravava o relatorio com o nome
+    do EfficientNet. A comparacao de backbones saiu com tres numeros identicos e
+    a conclusao foi "o backbone nao importa"; o ganho real era 4,8 pontos de
+    macro-F1 no nivel 3.
+
+    Nada falhava: pesos carregavam, metricas saiam, arquivo tinha o nome
+    esperado. So o rotulo mentia.
+    """
+
+    @staticmethod
+    def _aviso(backbone_config: str, backbone_ckpt: str):
+        import sys
+        from pathlib import Path
+
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+        from astro_classifier.config import ExperimentConfig
+        from astro_classifier.taxonomy import Level
+        from evaluate import aviso_backbone_divergente
+
+        config = ExperimentConfig(name="teste_config", level=Level.NEBULA)
+        config.model.backbone = backbone_config
+        return aviso_backbone_divergente(config, {"backbone": backbone_ckpt}, "nebula_best.pt")
+
+    def test_avisa_quando_diverge(self):
+        aviso = self._aviso("efficientnet_b0", "resnet50")
+        assert aviso is not None
+        assert "efficientnet_b0" in aviso and "resnet50" in aviso
+        assert "nebula_best.pt" in aviso
+        assert "--checkpoint-name" in aviso, "o aviso tem de dizer como consertar"
+
+    def test_silencioso_quando_coincide(self):
+        assert self._aviso("resnet50", "resnet50") is None
+
+    def test_silencioso_quando_o_checkpoint_nao_declara(self):
+        """Checkpoint antigo sem o campo `backbone` nao deve gerar ruido."""
+        import sys
+        from pathlib import Path
+
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+        from astro_classifier.config import ExperimentConfig
+        from astro_classifier.taxonomy import Level
+        from evaluate import aviso_backbone_divergente
+
+        config = ExperimentConfig(name="t", level=Level.NEBULA)
+        assert aviso_backbone_divergente(config, {}, "x.pt") is None

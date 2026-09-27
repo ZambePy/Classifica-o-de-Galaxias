@@ -147,6 +147,63 @@ def coletar_imagens(paths, indices: list[str], sem_varredura: bool) -> pd.DataFr
     return df.drop_duplicates(subset="path", keep="last").reset_index(drop=True)
 
 
+def alertar_imagens_duplicadas(df: pd.DataFrame, raw_root: Path, amostra: int = 4) -> int:
+    """Avisa quando duas imagens da tabela tem conteudo IDENTICO.
+
+    ISTO EXISTE POR CAUSA DE UM BUG QUE ACONTECEU DUAS VEZES.
+
+    A varredura de `raw/` entra por nome de pasta e aceita qualquer arquivo que
+    esteja la. Se um coletor roda com um esquema de nomes e depois com outro, as
+    imagens do primeiro ficam ORFAS no disco - e a varredura as soma ao dataset
+    como se fossem objetos distintos. A mesma imagem entao pode cair no treino
+    sob um nome e no teste sob o outro.
+
+    Aconteceu com `other`: 848 orfas, 735 duplicadas byte a byte. E aconteceu
+    com as nebulosas, por outra causa (deduplicacao incompleta por posicao).
+    Nas duas vezes o log dizia que tudo estava bem, porque a gravacao FUNCIONOU -
+    o que estava errado era o conjunto de arquivos existentes.
+
+    A checagem custa um hash por imagem. Para 66 mil imagens sao alguns minutos,
+    e roda uma vez por regeracao de splits - barato contra o preco de descobrir
+    o vazamento depois de treinar.
+    """
+    import hashlib
+    from collections import defaultdict
+
+    por_hash: dict[str, list[str]] = defaultdict(list)
+    ilegiveis = 0
+    for rel in df["path"]:
+        caminho = raw_root / rel
+        try:
+            por_hash[hashlib.md5(caminho.read_bytes()).hexdigest()].append(rel)
+        except OSError:
+            ilegiveis += 1
+
+    grupos = {h: v for h, v in por_hash.items() if len(v) > 1}
+    extras = sum(len(v) - 1 for v in grupos.values())
+
+    if ilegiveis:
+        print(f"  [aviso] {ilegiveis} imagens da tabela nao puderam ser lidas")
+
+    if not grupos:
+        print(f"  sem duplicatas de conteudo entre as {len(df)} imagens")
+        return 0
+
+    print(
+        f"  [ATENCAO] {extras} imagens duplicadas byte a byte, em {len(grupos)} grupos.\n"
+        "  A MESMA imagem pode cair em conjuntos diferentes - isso e vazamento."
+    )
+    for v in list(grupos.values())[:amostra]:
+        print(f"      {v}")
+    if len(grupos) > amostra:
+        print(f"      ... e outros {len(grupos) - amostra} grupos")
+    print(
+        "  Rode o coletor da classe afetada com --prune para remover as orfas,\n"
+        "  ou confira a deduplicacao por posicao se forem objetos de catalogo."
+    )
+    return extras
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--all", action="store_true", help="refaz a atribuicao global e os tres niveis")
@@ -159,6 +216,13 @@ def main() -> int:
         default=2000,
         help="teto por classe no nivel 1 (0 = sem teto). Evita que dezenas de "
         "milhares de galaxias afoguem as nebulosas.",
+    )
+    parser.add_argument(
+        "--skip-dup-check",
+        action="store_true",
+        help="pula a verificacao de imagens duplicadas por conteudo. Ela custa um "
+        "hash por imagem (poucos minutos para 66 mil) e ja pegou dois vazamentos - "
+        "pule so quando estiver iterando em splits e com pressa.",
     )
     parser.add_argument("--val-size", type=float, default=0.15)
     parser.add_argument("--test-size", type=float, default=0.15)

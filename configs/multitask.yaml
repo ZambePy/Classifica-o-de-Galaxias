@@ -1,0 +1,44 @@
+# MULTI-TAREFA - um backbone, tres cabecas
+#
+# Alternativa a cascata, para o item do roteiro "Cascata x multi-tarefa".
+# Nao substitui os tres modelos: existe para ser COMPARADO com eles.
+#
+# O campo `level` abaixo e um marcador. O ExperimentConfig exige um nivel, e
+# este modelo atende os tres ao mesmo tempo - `object` esta ali so para a
+# config carregar. Quem le o nivel neste modelo e a cabeca, nao a config.
+
+name: multitask
+level: object
+seed: 42
+
+data:
+  image_size: 224
+  batch_size: 32
+  num_workers: 4
+  # A loss mascarada ja normaliza por cabeca; pesos de classe entrariam em
+  # conflito com essa normalizacao e a comparacao com a cascata ficaria
+  # confundida por duas mudancas ao mesmo tempo.
+  class_weights: none
+  augment: true
+
+model:
+  # ResNet50, o backbone do nivel 1 da cascata - o mais forte dos tres. Se o
+  # multi-tarefa perdesse usando um backbone menor, nao saberiamos se a culpa
+  # e da arquitetura ou da capacidade.
+  backbone: resnet50
+  pretrained: true
+  dropout: 0.2
+  freeze_backbone_epochs: 0
+
+optim:
+  # O dataset da uniao tem ~29 mil imagens, quase todas galaxias. Uma epoca
+  # aqui e muito maior que uma epoca do nivel 1 (4889 imagens), entao menos
+  # epocas bastam.
+  epochs: 20
+  lr: 0.0003
+  weight_decay: 0.0001
+  scheduler: cosine
+  label_smoothing: 0.05
+  early_stopping_patience: 6
+  # Ver level1_object.yaml: nesta GPU o fp16 e 4,6x mais lento e produz NaN.
+  mixed_precision: false
