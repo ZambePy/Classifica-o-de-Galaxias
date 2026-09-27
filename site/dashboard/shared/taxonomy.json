@@ -1,0 +1,569 @@
+{
+  "version": "0.2.0",
+  "notes": "Taxonomia do dashboard. 'modelLabels' é o ponto de ligação com o modelo: cada rótulo que a IA devolve precisa estar em uma destas listas. Categorias também têm 'modelLabels' (nível 1 da cascata: galaxy / nebula). O rótulo 'other' não tem aba: vira o aviso 'Não parece galáxia nem nebulosa'. Rótulos do classificador do colega (contrato 1.0): galaxy, nebula, other, spiral, elliptical, irregular, emission, reflection, planetary, supernova_remnant. 'legacyId' guarda endereços antigos de abas que foram juntadas (o site redireciona). Baseado em pesquisa/01-galaxias.md (seção 8) e pesquisa/02-nebulosas.md (seção 6). Textos em inglês ficam no campo 'en' de cada item.",
+  "categories": [
+    {
+      "id": "galaxias",
+      "name": "Galáxias",
+      "singular": "galáxia",
+      "description": "Grandes conjuntos de bilhões de estrelas, gás e poeira.",
+      "modelLabels": [
+        "galaxy"
+      ],
+      "types": [
+        {
+          "id": "elipticas",
+          "name": "Elípticas",
+          "short": "E0–E4",
+          "description": "Formato redondo ou oval, sem braços. Costumam ter estrelas mais velhas, de cor amarelada.",
+          "visualCues": [
+            "Formato redondo ou oval",
+            "Brilho liso, sem braços",
+            "Cor amarelada ou avermelhada"
+          ],
+          "examples": [
+            "M87, na constelação de Virgem",
+            "M49"
+          ],
+          "modelLabels": [
+            "elliptical",
+            "galaxy10:2",
+            "galaxy10:3",
+            "round_smooth",
+            "in_between_round_smooth"
+          ],
+          "trainable": true,
+          "en": {
+            "name": "Elliptical",
+            "description": "Round or oval shape, with no arms. Usually older stars with a yellowish colour.",
+            "visualCues": [
+              "Round or oval shape",
+              "Smooth glow, no arms",
+              "Yellowish or reddish colour"
+            ],
+            "examples": [
+              "M87, in the Virgo constellation",
+              "M49"
+            ]
+          },
+          "exampleIds": [
+            "m87",
+            "m49"
+          ]
+        },
+        {
+          "id": "alongadas",
+          "name": "Alongadas",
+          "short": "E5–E7 / S0",
+          "description": "Parecem um charuto: compridas, lisas e sem braços.",
+          "visualCues": [
+            "Formato comprido",
+            "Brilho liso",
+            "Sem braços"
+          ],
+          "examples": [
+            "Galáxia do Fuso"
+          ],
+          "modelLabels": [
+            "galaxy10:4",
+            "cigar_shaped_smooth"
+          ],
+          "trainable": true,
+          "warning": "Tipo raro: a IA pode ter menos certeza aqui.",
+          "en": {
+            "name": "Elongated",
+            "description": "They look like a cigar: long, smooth and without arms.",
+            "visualCues": [
+              "Long shape",
+              "Smooth glow",
+              "No arms"
+            ],
+            "examples": [
+              "Spindle Galaxy"
+            ],
+            "warning": "Rare type: the AI may be less sure here."
+          },
+          "exampleIds": [
+            "fuso"
+          ]
+        },
+        {
+          "id": "espirais",
+          "name": "Espirais",
+          "short": "Sa–Sd / SBa–SBd",
+          "description": "Galáxias com braços em forma de espiral saindo do centro. Algumas têm uma faixa reta de estrelas no meio. A Via Láctea é uma delas.",
+          "visualCues": [
+            "Braços em espiral",
+            "Centro brilhante",
+            "Pontos azuis nos braços"
+          ],
+          "examples": [
+            "Via Láctea",
+            "NGC 1300",
+            "Andrômeda",
+            "Galáxia de Bode",
+            "Galáxia do Cata-vento",
+            "Galáxia do Triângulo",
+            "Galáxia do Redemoinho"
+          ],
+          "modelLabels": [
+            "spiral"
+          ],
+          "trainable": true,
+          "subfilters": [
+            {
+              "id": "barradas",
+              "name": "Barradas",
+              "legacyId": "espirais-barradas",
+              "modelLabels": [
+                "galaxy10:5",
+                "barred_spiral"
+              ],
+              "en": {
+                "name": "Barred"
+              }
+            },
+            {
+              "id": "fechadas",
+              "name": "Fechadas",
+              "legacyId": "espirais-fechadas",
+              "modelLabels": [
+                "galaxy10:6",
+                "unbarred_tight_spiral"
+              ],
+              "en": {
+                "name": "Tight"
+              }
+            },
+            {
+              "id": "abertas",
+              "name": "Abertas",
+              "legacyId": "espirais-abertas",
+              "modelLabels": [
+                "galaxy10:7",
+                "unbarred_loose_spiral"
+              ],
+              "en": {
+                "name": "Open"
+              }
+            }
+          ],
+          "en": {
+            "name": "Spirals",
+            "description": "Galaxies with spiral-shaped arms coming out of the centre. Some have a straight band of stars in the middle. The Milky Way is one of them.",
+            "visualCues": [
+              "Spiral arms",
+              "Bright centre",
+              "Blue dots in the arms"
+            ],
+            "examples": [
+              "Milky Way",
+              "NGC 1300",
+              "Andromeda",
+              "Bode's Galaxy",
+              "Pinwheel Galaxy",
+              "Triangulum Galaxy",
+              "Whirlpool Galaxy"
+            ]
+          },
+          "exampleIds": [
+            "viaLactea",
+            "ngc1300",
+            "andromeda",
+            "bode",
+            "cataVento",
+            "triangulo",
+            "redemoinho"
+          ]
+        },
+        {
+          "id": "de-perfil",
+          "name": "De perfil",
+          "short": "Edge-on",
+          "description": "Galáxias em forma de disco vistas de lado. Parecem uma linha fina.",
+          "visualCues": [
+            "Linha fina e comprida",
+            "Faixa escura de poeira",
+            "Pode ter um centro saliente"
+          ],
+          "examples": [
+            "Galáxia do Sombrero",
+            "Galáxia da Agulha"
+          ],
+          "modelLabels": [
+            "galaxy10:8",
+            "galaxy10:9",
+            "edge_on_no_bulge",
+            "edge_on_with_bulge"
+          ],
+          "subfilters": [
+            {
+              "id": "sem-bojo",
+              "name": "Sem centro saliente",
+              "modelLabels": [
+                "galaxy10:8",
+                "edge_on_no_bulge"
+              ],
+              "en": {
+                "name": "Flat centre"
+              }
+            },
+            {
+              "id": "com-bojo",
+              "name": "Com centro saliente",
+              "modelLabels": [
+                "galaxy10:9",
+                "edge_on_with_bulge"
+              ],
+              "en": {
+                "name": "Bulging centre"
+              }
+            }
+          ],
+          "trainable": true,
+          "en": {
+            "name": "Edge-on",
+            "description": "Disc galaxies seen from the side. They look like a thin line.",
+            "visualCues": [
+              "Thin, long line",
+              "Dark dust stripe",
+              "May have a bulging centre"
+            ],
+            "examples": [
+              "Sombrero Galaxy",
+              "Needle Galaxy"
+            ]
+          },
+          "exampleIds": [
+            "sombrero",
+            "agulha"
+          ]
+        },
+        {
+          "id": "em-fusao",
+          "name": "Em colisão",
+          "short": "Peculiares",
+          "description": "Duas ou mais galáxias se encontrando ou se puxando.",
+          "visualCues": [
+            "Dois centros",
+            "Rastros de estrelas",
+            "Formato deformado"
+          ],
+          "examples": [
+            "Galáxias Antenas",
+            "Galáxias dos Ratos"
+          ],
+          "modelLabels": [
+            "galaxy10:1",
+            "merging"
+          ],
+          "trainable": true,
+          "en": {
+            "name": "Colliding",
+            "description": "Two or more galaxies meeting or pulling on each other.",
+            "visualCues": [
+              "Two centres",
+              "Trails of stars",
+              "Twisted shape"
+            ],
+            "examples": [
+              "Antennae Galaxies",
+              "Mice Galaxies"
+            ],
+            "short": "Peculiar"
+          },
+          "exampleIds": [
+            "antenas",
+            "ratos"
+          ]
+        },
+        {
+          "id": "irregulares",
+          "name": "Irregulares",
+          "short": "Irr",
+          "description": "Sem formato definido: nem redondas, nem espirais.",
+          "visualCues": [
+            "Sem simetria",
+            "Sem braços organizados",
+            "Manchas brilhantes espalhadas"
+          ],
+          "examples": [
+            "Grande Nuvem de Magalhães",
+            "Galáxia do Charuto"
+          ],
+          "modelLabels": [
+            "galaxy10:0",
+            "disturbed",
+            "irregular"
+          ],
+          "trainable": true,
+          "en": {
+            "name": "Irregular",
+            "description": "No defined shape: neither round nor spiral.",
+            "visualCues": [
+              "No symmetry",
+              "No organised arms",
+              "Scattered bright patches"
+            ],
+            "examples": [
+              "Large Magellanic Cloud",
+              "Cigar Galaxy"
+            ]
+          },
+          "exampleIds": [
+            "lmc",
+            "charuto"
+          ]
+        }
+      ],
+      "en": {
+        "name": "Galaxies",
+        "singular": "galaxy",
+        "description": "Huge groups of billions of stars, gas and dust."
+      }
+    },
+    {
+      "id": "nebulosas",
+      "name": "Nebulosas",
+      "singular": "nebulosa",
+      "description": "Nuvens de gás e poeira no espaço, onde estrelas nascem ou morrem.",
+      "modelLabels": [
+        "nebula"
+      ],
+      "types": [
+        {
+          "id": "emissao",
+          "name": "Emissão",
+          "short": "H II",
+          "description": "Nuvens que brilham com luz própria, aquecidas por estrelas jovens. Geralmente avermelhadas.",
+          "visualCues": [
+            "Tons de vermelho e rosa",
+            "Estrelas novas dentro",
+            "Formato espalhado"
+          ],
+          "examples": [
+            "Nebulosa de Órion",
+            "Nebulosa da Águia",
+            "Pilares da Criação",
+            "Nebulosa da Lagoa"
+          ],
+          "modelLabels": [
+            "emission",
+            "hii_region"
+          ],
+          "trainable": true,
+          "en": {
+            "name": "Emission",
+            "description": "Clouds that glow with their own light, heated by young stars. Usually reddish.",
+            "visualCues": [
+              "Red and pink tones",
+              "New stars inside",
+              "Spread-out shape"
+            ],
+            "examples": [
+              "Orion Nebula",
+              "Eagle Nebula",
+              "Pillars of Creation",
+              "Lagoon Nebula"
+            ]
+          },
+          "exampleIds": [
+            "orion",
+            "aguia",
+            "pilares",
+            "lagoa"
+          ]
+        },
+        {
+          "id": "reflexao",
+          "name": "Reflexão",
+          "short": "RN",
+          "description": "Poeira que reflete a luz de estrelas próximas. Parecem azuladas.",
+          "visualCues": [
+            "Tom azul",
+            "Brilho suave em volta de estrelas"
+          ],
+          "examples": [
+            "Plêiades",
+            "Nebulosa Cabeça da Bruxa"
+          ],
+          "modelLabels": [
+            "reflection"
+          ],
+          "trainable": true,
+          "en": {
+            "name": "Reflection",
+            "description": "Dust that reflects light from nearby stars. They look bluish.",
+            "visualCues": [
+              "Blue tone",
+              "Soft glow around stars"
+            ],
+            "examples": [
+              "Pleiades",
+              "Witch Head Nebula"
+            ]
+          },
+          "exampleIds": [
+            "pleiades",
+            "bruxa"
+          ]
+        },
+        {
+          "id": "escuras",
+          "name": "Escuras",
+          "short": "DN",
+          "description": "Nuvens grossas de poeira que escondem a luz de trás. Aparecem como sombras.",
+          "visualCues": [
+            "Manchas escuras",
+            "Contorno bem marcado",
+            "Poucas estrelas visíveis"
+          ],
+          "examples": [
+            "Nebulosa Cabeça de Cavalo",
+            "Saco de Carvão"
+          ],
+          "modelLabels": [
+            "dark"
+          ],
+          "trainable": true,
+          "en": {
+            "name": "Dark",
+            "description": "Thick dust clouds that hide the light behind them. They look like shadows.",
+            "visualCues": [
+              "Dark patches",
+              "Sharp outline",
+              "Few visible stars"
+            ],
+            "examples": [
+              "Horsehead Nebula",
+              "Coalsack"
+            ]
+          },
+          "exampleIds": [
+            "cavalo",
+            "carvao"
+          ]
+        },
+        {
+          "id": "planetarias",
+          "name": "Planetárias",
+          "short": "PN",
+          "description": "Camadas de gás soltas por uma estrela parecida com o Sol no fim da vida. Não têm relação com planetas.",
+          "visualCues": [
+            "Formato de anel ou de borboleta",
+            "Estrela no centro",
+            "Tons de verde e azul"
+          ],
+          "examples": [
+            "Nebulosa do Anel",
+            "Nebulosa da Hélice",
+            "Olho de Gato"
+          ],
+          "modelLabels": [
+            "planetary",
+            "protoplanetary"
+          ],
+          "trainable": true,
+          "en": {
+            "name": "Planetary",
+            "description": "Layers of gas released by a Sun-like star at the end of its life. Nothing to do with planets.",
+            "visualCues": [
+              "Ring or butterfly shape",
+              "Star in the centre",
+              "Green and blue tones"
+            ],
+            "examples": [
+              "Ring Nebula",
+              "Helix Nebula",
+              "Cat's Eye"
+            ]
+          },
+          "exampleIds": [
+            "anel",
+            "helice",
+            "olhoGato"
+          ]
+        },
+        {
+          "id": "remanescentes",
+          "name": "Restos de supernova",
+          "short": "SNR",
+          "description": "Restos de estrelas que explodiram, ainda se espalhando pelo espaço.",
+          "visualCues": [
+            "Fios entrelaçados",
+            "Formato de casca",
+            "Várias cores"
+          ],
+          "examples": [
+            "Nebulosa do Caranguejo",
+            "Nebulosa do Véu"
+          ],
+          "modelLabels": [
+            "supernova_remnant",
+            "pulsar_wind"
+          ],
+          "trainable": true,
+          "en": {
+            "name": "Supernova remains",
+            "description": "Remains of stars that exploded, still spreading through space.",
+            "visualCues": [
+              "Tangled threads",
+              "Shell shape",
+              "Many colours"
+            ],
+            "examples": [
+              "Crab Nebula",
+              "Veil Nebula"
+            ]
+          },
+          "exampleIds": [
+            "caranguejo",
+            "veu"
+          ]
+        },
+        {
+          "id": "bolhas-jatos",
+          "name": "Bolhas e jatos",
+          "short": "WR / HH",
+          "description": "Bolhas sopradas por estrelas muito fortes e jatos de estrelas que estão nascendo.",
+          "visualCues": [
+            "Formato de bolha",
+            "Jatos em direções opostas"
+          ],
+          "examples": [
+            "Nebulosa da Bolha",
+            "Nebulosa Crescente"
+          ],
+          "modelLabels": [
+            "bubble",
+            "herbig_haro"
+          ],
+          "trainable": false,
+          "warning": "Aba só informativa por enquanto: ainda não há fotos suficientes para treinar a IA.",
+          "en": {
+            "name": "Bubbles and jets",
+            "description": "Bubbles blown by very strong stars and jets from stars being born.",
+            "visualCues": [
+              "Bubble shape",
+              "Jets in opposite directions"
+            ],
+            "examples": [
+              "Bubble Nebula",
+              "Crescent Nebula"
+            ],
+            "warning": "Information-only tab for now: there are not enough photos yet to train the AI."
+          },
+          "exampleIds": [
+            "bolha",
+            "crescente"
+          ]
+        }
+      ],
+      "en": {
+        "name": "Nebulae",
+        "singular": "nebula",
+        "description": "Clouds of gas and dust in space, where stars are born or die."
+      }
+    }
+  ]
+}

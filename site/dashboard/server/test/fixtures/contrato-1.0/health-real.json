@@ -1,0 +1,11 @@
+{
+  "status": "ok",
+  "contract_version": "1.0",
+  "mode": "real",
+  "device": "cuda",
+  "models_loaded": [
+    "object",
+    "galaxy",
+    "nebula"
+  ]
+}

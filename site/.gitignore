@@ -1,0 +1,9 @@
+# Pasta do site Cassyn dentro do repositório do classificador.
+# O .gitignore da raiz (do colega) já esconde .venv, __pycache__, dist/, build/, *.pt, *.onnx, .env, logs e arquivos do sistema.
+node_modules/
+# Só o sistema entra no repositório: marca, logos e geradores ficam na máquina de quem cuida do site
+branding/
+dashboard/client/public/logos/
+ferramentas/previa/
+ferramentas/texturas-planetas/
+dashboard/server/data/

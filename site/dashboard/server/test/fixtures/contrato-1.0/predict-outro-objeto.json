@@ -1,0 +1,42 @@
+{
+  "contract_version": "1.0",
+  "mock": false,
+  "object": "other",
+  "confidence": 0.88,
+  "subtype": null,
+  "subtype_confidence": null,
+  "summary_pt": "Outro objeto",
+  "levels": [
+    {
+      "level": "object",
+      "predicted": "other",
+      "predicted_pt": "Outro objeto",
+      "confidence": 0.88,
+      "scores": [
+        {
+          "label": "other",
+          "label_pt": "Outro objeto",
+          "probability": 0.88
+        },
+        {
+          "label": "nebula",
+          "label_pt": "Nebulosa",
+          "probability": 0.07
+        },
+        {
+          "label": "galaxy",
+          "label_pt": "Galaxia",
+          "probability": 0.05
+        }
+      ],
+      "model_version": "object-e12"
+    }
+  ],
+  "domain": {
+    "out_of_domain": false,
+    "score": 0.88,
+    "threshold": 0.884,
+    "message_pt": "Imagem dentro do dominio de treino."
+  },
+  "inference_ms": 41.7
+}

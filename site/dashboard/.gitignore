@@ -1,0 +1,10 @@
+node_modules/
+client/dist/
+server/data/
+__pycache__/
+.pytest_cache/
+.env
+*.pt
+*.pth
+*.onnx
+*.h5

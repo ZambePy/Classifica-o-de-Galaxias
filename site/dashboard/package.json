@@ -1,0 +1,39 @@
+{
+  "name": "cassyn-dashboard",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Dashboard do Cassyn — classificação de galáxias e nebulosas por CNN (esboço).",
+  "type": "module",
+  "engines": {
+    "node": ">=22.9"
+  },
+  "scripts": {
+    "dev": "concurrently -k -n api,web -c cyan,magenta \"npm:dev:api\" \"npm:dev:web\"",
+    "dev:api": "node --watch --env-file-if-exists=.env server/index.js",
+    "dev:web": "vite --config client/vite.config.js",
+    "build": "vite build --config client/vite.config.js",
+    "start": "node --env-file-if-exists=.env server/index.js",
+    "test:server": "node --test \"server/test/*.test.js\"",
+    "dev:classificador": "powershell -NoProfile -ExecutionPolicy Bypass -File ../ferramentas/integracao/iniciar-classificador.ps1",
+    "dev:classificador:real": "npm run dev:classificador -- -Modo real",
+    "dev:all": "concurrently -k -n api,web,ia -c cyan,magenta,yellow \"npm:dev:api\" \"npm:dev:web\" \"npm:dev:classificador\"",
+    "dev:all:real": "concurrently -k -n api,web,ia -c cyan,magenta,yellow \"npm:dev:api\" \"npm:dev:web\" \"npm:dev:classificador:real\"",
+    "verificar": "powershell -NoProfile -ExecutionPolicy Bypass -File ../ferramentas/integracao/verificar-ambiente.ps1"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@fontsource/figtree": "^5.3.0",
+    "@fontsource/syne": "^5.3.0",
+    "express": "^5.2.1",
+    "helmet": "^8.3.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "react-router-dom": "^7.18.4",
+    "three": "^0.186.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^6.1.1",
+    "concurrently": "^9.2.4",
+    "vite": "^8.3.0"
+  }
+}

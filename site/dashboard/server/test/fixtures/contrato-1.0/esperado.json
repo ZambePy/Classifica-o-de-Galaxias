@@ -1,0 +1,92 @@
+{
+  "_leia": "O que o adaptador do Node deve produzir para cada exemplo. 'ambiguous' = diferença menor que 0,15 entre as 2 maiores probabilidades do nível que decidiu a aba. 'rejeitar' = contract_version com major diferente de 1 vira erro 502 com mensagem clara.",
+  "casos": {
+    "predict-galaxia-espiral.json": {
+      "category": "galaxias",
+      "type": "espirais",
+      "kind": "galaxia",
+      "outOfDomain": false,
+      "mock": false,
+      "ambiguous": false
+    },
+    "predict-galaxia-eliptica.json": {
+      "category": "galaxias",
+      "type": "elipticas",
+      "kind": "galaxia",
+      "outOfDomain": false,
+      "mock": false,
+      "ambiguous": false
+    },
+    "predict-nebulosa-emissao.json": {
+      "category": "nebulosas",
+      "type": "emissao",
+      "kind": "nebulosa",
+      "outOfDomain": false,
+      "mock": false,
+      "ambiguous": false
+    },
+    "predict-nebulosa-remanescente.json": {
+      "category": "nebulosas",
+      "type": "remanescentes",
+      "kind": "nebulosa",
+      "outOfDomain": false,
+      "mock": false,
+      "ambiguous": false
+    },
+    "predict-outro-objeto.json": {
+      "category": null,
+      "type": null,
+      "kind": "outro",
+      "outOfDomain": false,
+      "mock": false,
+      "ambiguous": false
+    },
+    "predict-fora-do-dominio.json": {
+      "category": "galaxias",
+      "type": "espirais",
+      "kind": "galaxia",
+      "outOfDomain": true,
+      "mock": false,
+      "ambiguous": true
+    },
+    "predict-sem-subtipo.json": {
+      "category": "nebulosas",
+      "type": null,
+      "kind": "nebulosa",
+      "outOfDomain": false,
+      "mock": false,
+      "ambiguous": false
+    },
+    "predict-ambigua.json": {
+      "category": "galaxias",
+      "type": "espirais",
+      "kind": "galaxia",
+      "outOfDomain": false,
+      "mock": false,
+      "ambiguous": true
+    },
+    "predict-mock.json": {
+      "category": "galaxias",
+      "type": "espirais",
+      "kind": "galaxia",
+      "outOfDomain": false,
+      "mock": true,
+      "ambiguous": false
+    },
+    "predict-contrato-2.0.json": {
+      "rejeitar": true
+    },
+    "health-mock.json": {
+      "connected": true,
+      "demo": true
+    },
+    "health-real-antes-do-primeiro-uso.json": {
+      "connected": true,
+      "demo": false
+    },
+    "health-real.json": {
+      "connected": true,
+      "demo": false
+    }
+  }
+}

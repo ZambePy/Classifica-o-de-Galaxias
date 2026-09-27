@@ -1,0 +1,66 @@
+{
+  "contract_version": "1.0",
+  "mock": false,
+  "object": "galaxy",
+  "confidence": 0.61,
+  "subtype": "spiral",
+  "subtype_confidence": 0.5,
+  "summary_pt": "Galaxia - Espiral",
+  "levels": [
+    {
+      "level": "object",
+      "predicted": "galaxy",
+      "predicted_pt": "Galaxia",
+      "confidence": 0.61,
+      "scores": [
+        {
+          "label": "galaxy",
+          "label_pt": "Galaxia",
+          "probability": 0.61
+        },
+        {
+          "label": "nebula",
+          "label_pt": "Nebulosa",
+          "probability": 0.3
+        },
+        {
+          "label": "other",
+          "label_pt": "Outro objeto",
+          "probability": 0.09
+        }
+      ],
+      "model_version": "object-e12"
+    },
+    {
+      "level": "galaxy",
+      "predicted": "spiral",
+      "predicted_pt": "Espiral",
+      "confidence": 0.5,
+      "scores": [
+        {
+          "label": "spiral",
+          "label_pt": "Espiral",
+          "probability": 0.5
+        },
+        {
+          "label": "elliptical",
+          "label_pt": "Eliptica",
+          "probability": 0.42
+        },
+        {
+          "label": "irregular",
+          "label_pt": "Irregular",
+          "probability": 0.08
+        }
+      ],
+      "model_version": "galaxy-e18"
+    }
+  ],
+  "domain": {
+    "out_of_domain": true,
+    "score": 0.61,
+    "threshold": 0.884,
+    "message_pt": "Imagem fora do dominio de treino: o resultado pode nao ser confiavel."
+  },
+  "inference_ms": 41.7
+}

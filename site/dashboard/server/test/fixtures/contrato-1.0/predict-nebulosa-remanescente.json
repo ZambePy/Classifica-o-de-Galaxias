@@ -1,0 +1,71 @@
+{
+  "contract_version": "1.0",
+  "mock": false,
+  "object": "nebula",
+  "confidence": 0.94,
+  "subtype": "supernova_remnant",
+  "subtype_confidence": 0.64,
+  "summary_pt": "Nebulosa - Remanescente de supernova",
+  "levels": [
+    {
+      "level": "object",
+      "predicted": "nebula",
+      "predicted_pt": "Nebulosa",
+      "confidence": 0.94,
+      "scores": [
+        {
+          "label": "nebula",
+          "label_pt": "Nebulosa",
+          "probability": 0.94
+        },
+        {
+          "label": "galaxy",
+          "label_pt": "Galaxia",
+          "probability": 0.03
+        },
+        {
+          "label": "other",
+          "label_pt": "Outro objeto",
+          "probability": 0.03
+        }
+      ],
+      "model_version": "object-e12"
+    },
+    {
+      "level": "nebula",
+      "predicted": "supernova_remnant",
+      "predicted_pt": "Remanescente de supernova",
+      "confidence": 0.64,
+      "scores": [
+        {
+          "label": "supernova_remnant",
+          "label_pt": "Remanescente de supernova",
+          "probability": 0.64
+        },
+        {
+          "label": "planetary",
+          "label_pt": "Nebulosa planetaria",
+          "probability": 0.17
+        },
+        {
+          "label": "emission",
+          "label_pt": "Nebulosa de emissao",
+          "probability": 0.11
+        },
+        {
+          "label": "reflection",
+          "label_pt": "Nebulosa de reflexao",
+          "probability": 0.08
+        }
+      ],
+      "model_version": "nebula-e18"
+    }
+  ],
+  "domain": {
+    "out_of_domain": false,
+    "score": 0.94,
+    "threshold": 0.884,
+    "message_pt": "Imagem dentro do dominio de treino."
+  },
+  "inference_ms": 41.7
+}

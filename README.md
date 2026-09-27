@@ -576,3 +576,117 @@ MIT — ver [LICENSE](LICENSE).
 
 O código é MIT. **As imagens obtidas de levantamentos astronômicos e catálogos
 seguem os termos de cada fonte** — verifique-os antes de redistribuir dados.
+
+---
+
+## Como executar
+
+O sistema tem duas partes que rodam juntas:
+
+| Parte | Pasta | Endereço |
+|---|---|---|
+| API de classificação (Python, FastAPI) | `src/astro_classifier/api` | `http://127.0.0.1:8000` |
+| Site Cassyn (React + Node.js) | `site/dashboard` | `http://localhost:5173` (desenvolvimento) ou `http://localhost:3001` (produção) |
+
+O navegador nunca fala direto com a API. Ele chama o servidor Node do site (`/api/classify`), que repassa a imagem para a API em `127.0.0.1:8000` e traduz a resposta para os nomes do site.
+
+### 1. O que instalar
+
+- Python 3.10 ou mais novo
+- Node.js 22.9 ou mais novo
+- Git
+
+### 2. Preparar a API
+
+Na raiz do repositório:
+
+```powershell
+# Windows
+powershell -ExecutionPolicy Bypass -File scripts\setup_env.ps1
+```
+
+```bash
+# Linux / macOS
+bash scripts/setup_env.sh
+```
+
+### 3. Colocar os modelos (só para o modo real)
+
+Os pesos não ficam no repositório. Crie a pasta `modelos/checkpoints` **ao lado** da pasta do repositório e coloque nela os 4 arquivos do treino:
+
+```
+sua-pasta/
+  Classifica-o-de-Galaxias/     <- este repositório
+  modelos/
+    checkpoints/
+      object_best.pt
+      galaxy_best.pt
+      nebula_best.pt
+      ood_threshold.json
+```
+
+Sem os modelos, use o **modo simulado** (respostas de teste): o site mostra o selo "Dados simulados".
+
+### 4. Preparar o site
+
+```powershell
+cd site/dashboard
+npm install
+copy .env.example .env      # opcional: portas, limite de envios etc. (Linux/macOS: cp). Troque o MODEL_API_KEY
+npm run verificar           # Windows: confere se está tudo pronto
+```
+
+### 5. Ligar tudo
+
+**Windows, um terminal só** (na pasta `site/dashboard`):
+
+```powershell
+npm run dev:all        # site + API em modo simulado
+npm run dev:all:real   # site + API com os modelos
+```
+
+**Ou em dois terminais.** Terminal 1, a API:
+
+```powershell
+# Windows, na pasta site/dashboard
+npm run dev:classificador        # modo simulado
+npm run dev:classificador:real   # com os modelos
+```
+
+```bash
+# Linux / macOS, na raiz do repositório (sem ASTRO_API_MODE=real, liga em modo simulado)
+ASTRO_API_MODE=real ASTRO_DATA_ROOT=../modelos \
+  .venv/bin/python -m uvicorn astro_classifier.api.main:app --app-dir src --host 127.0.0.1 --port 8000
+```
+
+Terminal 2, o site:
+
+```powershell
+cd site/dashboard
+npm run dev
+```
+
+Abra `http://localhost:5173` e envie uma foto na tela "Enviar imagem".
+
+### 6. Versão de produção
+
+```powershell
+cd site/dashboard
+npm run build
+npm start
+```
+
+O site e a rota `/api` ficam em `http://localhost:3001`. A API precisa estar ligada ao mesmo tempo, sempre só em `127.0.0.1`, nunca aberta para a internet.
+
+### 7. Testes
+
+- **API:** na raiz do repositório, `.\.venv\Scripts\python -m pytest` (Windows) ou `.venv/bin/python -m pytest` (Linux / macOS)
+- **Site:** `npm run test:server`, em `site/dashboard`
+
+### Problemas comuns
+
+- **O site diz que a IA está fora do ar:** a API não está ligada na porta 8000.
+- **A API não liga no modo real:** falta algum dos 4 arquivos em `modelos/checkpoints`.
+- **O 1º envio demora alguns segundos:** os modelos carregam no 1º uso. Com `CLASSIFIER_WARMUP=1` no `.env` do site, eles já carregam quando o site liga.
+- **"Muitos envios seguidos":** o site aceita até 10 fotos por minuto por endereço (`CLASSIFY_PER_MINUTE` no `.env`).
+- **Porta ocupada:** feche o outro programa ou mude a porta (`PORT` no `.env` do site).

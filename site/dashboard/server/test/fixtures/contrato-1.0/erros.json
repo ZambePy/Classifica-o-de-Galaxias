@@ -1,0 +1,45 @@
+{
+  "_leia": "Erros da API do colega (docs/api.md). O Node traduz para as mensagens do site (cl.err.*).",
+  "erros": [
+    {
+      "status": 400,
+      "body": {
+        "detail": "Arquivo vazio."
+      }
+    },
+    {
+      "status": 413,
+      "body": {
+        "detail": "Imagem maior que o limite de 20 MB."
+      }
+    },
+    {
+      "status": 415,
+      "body": {
+        "detail": "Arquivo nao reconhecido como imagem."
+      }
+    },
+    {
+      "status": 422,
+      "body": {
+        "detail": [
+          {
+            "type": "missing",
+            "loc": [
+              "body",
+              "file"
+            ],
+            "msg": "Field required"
+          }
+        ]
+      }
+    },
+    {
+      "status": 500,
+      "body": {
+        "detail": "Internal Server Error"
+      },
+      "nota": "Hoje ModelNotAvailable (checkpoint faltando) sai como 500. O Node deve mostrar 'IA indisponível' (503)."
+    }
+  ]
+}
